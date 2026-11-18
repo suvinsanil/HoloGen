@@ -99,9 +99,49 @@ To test how well the spatial log-depth gradient **depth-discontinuity map** $D_{
 
 ---
 
-## 5. Known Fundamental Limitations
+## 5. Multi-View Datasets, Protocols & Consolidated Results
 
-1. **Single-View Scale Ambiguity:** A single 2D projection cannot uniquely determine absolute metric scale without strong scene priors. Relative models (`Depth Anything V2 Small`, `DPT-Hybrid`) recover ordinal/affine structure only.
-2. **Occluded & Unseen Surfaces:** Single-view back-projection only observes the front visible surface (2.5D frustum shell). Regions behind foreground objects are empty in the point cloud; watertight meshers like Poisson reconstruction will hallucinate smooth bubble surfaces across occluded voids.
-3. **Reflective, Transparent, and Thin Structures:** Mirrors, glass, and fine foliage violate Lambertian assumptions and produce depth bleeding or disconnected point clusters.
-4. **Depth-Discontinuity Map Is Not Calibrated Uncertainty:** The spatial log-depth gradient map detects 1D occlusion jumps (`mean Spearman rho = +0.1083` vs. absolute error, `+0.1580` vs. relative error) and does not predict planar bias on smooth surfaces.
+### 5.1 Multi-View Datasets & Licences
+| Dataset | Scene / Views | Reference / Ground-Truth Type | License / Source |
+| :--- | :--- | :--- | :--- |
+| **SampleFountainRGBDImages** | 33 color frames ($640\times 480$) | `scene/key.log` trajectory & `scene/integrated.ply` (**RGB-D reference reconstruction**, *not* laser ground truth) | Open3D `SampleFountainRGBDImages` (MIT) |
+| **ETH3D `pipes`** | 14 DSLR JPEGs ($6048\times 4032$, `THIN_PRISM_FISHEYE` GT) | `dslr_calibration_jpg/` poses & `dslr_scan_eval/scan1.ply` (**Faro laser scan ground truth**) | ETH3D Multi-View Benchmark (**CC-BY-SA**) |
+| **`datasets/custom_scene_01/`** | Qualitative user scene | Not present in workspace (`not_present_in_workspace`) — **not run** | — |
+
+### 5.2 Consolidated Benchmark Summary
+1. **Experiment A — Monocular Depth ($n=8$ RGB-D scenes):** `Depth Anything V2 Small` achieves `Abs Rel = 0.0945`, `delta < 1.25 = 0.9038`, `Edge F1 = 0.6727` (`none` refinement; `guided` and `bilateral` reduced Edge F1 to `0.6544` / `0.5873` without improving Abs Rel).
+2. **Phase 7b.5 — Two-View Epipolar Geometry (10 pairs × 3 seeds = 30 runs/method/scene):**
+   - **ETH3D `pipes` (undistorted `PINHOLE`, GT poses, Med [IQR]):** `from_scratch_8pt_with_gn` achieves Rot `0.247° [0.655°]`, Trans `0.904° [1.645°]`, Reproj RMSE `0.321 [0.171] px` (vs. `no_gn` `2.314 px`, `pycolmap` `0.267° / 0.883° / 0.343 px`, `OpenCV 5-pt` `0.400° / 1.155° / 0.401 px`).
+   - **Fountain (RGB-D ref., Med [IQR]):** All four methods plateau near `~1.0°` rotation error (`0.967°–1.022°`), reflecting the RGB-D trajectory's noise floor.
+3. **Phase 7b / 7c.5 — N-View SfM & 80/20 Held-Out Depth Alignment:**
+   - **Fountain (33 views):** `SIMPLE_RADIAL`, `33/33` registered, `ATE RMSE = 0.0157 m`, `80/20` held-out `Abs Rel = 0.0158` (`10` views).
+   - **ETH3D `pipes` (14 views):** Auto-fallback `SIMPLE_RADIAL -> OPENCV`, `14/14` registered, `ATE RMSE = 0.0067–0.0074 m`, `80/20` held-out `Abs Rel = 0.0519`.
+4. **Experiment D v2 (`phase-7e.3`) — Equalized 3D Geometry & Per-View Depth (NO ICP Headline, Equal-Density):**
+   - **Fountain (`tau=0.05 m`, RGB-D ref., in-sample tuned):** `N=1` oracle scale (`0.223` F1) < `N=1` oracle scale+shift (`0.742`) < `N=5` (`0.824`) < `N=10` (`0.831` AABB / `0.853` Frustum).
+   - **ETH3D `pipes` (`tau=0.10 m`, Faro GT, out-of-sample):** `N=1` oracle scale (`0.099` AABB F1 / `0.226` Frustum F1), `N=1` oracle scale+shift (`0.257` AABB F1 / `0.802` Frustum F1), Multi-view `N=14` (`0.276` AABB F1 / `0.657` Frustum F1; `0.699` Frustum F1 with `default 0.10/0.18`; `0.473` AABB F1 with rigid ICP).
+   - **ETH3D Per-View GT Depth (`14/14` views, Med [IQR]):** Single-view median-scale `Abs Rel = 0.1688 [0.1450]` | **Multi-view SfM-aligned `Abs Rel = 0.0963 [0.0370]`** (0 GT depth params) | Single-view oracle scale+shift `Abs Rel = 0.0736 [0.0366]`.
+
+---
+
+## 6. System Metrics (Real Measured Runs)
+
+| Pipeline Mode & Scene | Hardware | Stage Timings | Output Counts | Peak RSS / VRAM |
+| :--- | :--- | :--- | :--- | :--- |
+| **Single-View** (`sample_01_building`, $640\times 480$) | i5-1135G7, 7.7 GB RAM, MX330 2 GB VRAM | Preprocess `49 ms`, Depth `552 ms`, Uncertainty `7 ms`, Backproj `14 ms`, Clean `1,156 ms`, Mesh `13,386 ms`, Texture `282 ms`, Export `2,737 ms`, **Total `19.17 s`** | `256,952` pts; `545,572` full faces -> `120,000` viewer faces | Fits in 2 GB VRAM (`Depth Anything V2 Small` FP16/FP32) |
+| **Multi-View** (`Fountain`, 10 views, `1600 px` SfM / `640 px` depth) | i5-1135G7, 7.7 GB RAM, CPU SfM + CUDA depth | SfM + Undistort `12.28 s`, Depth+Align+TSDF+Mesh `13.47 s`, **Total `25.74 s`** | `10/10` registered; `179,703` pts, `330,242` faces | **Whole-pipeline Peak RSS: `876.2 MB`** (`+409.0 MB` over baseline) |
+| **Multi-View** (`ETH3D pipes`, 14 views, `6048×4032` -> `1600 px`) | i5-1135G7, 7.7 GB RAM, CPU SfM + CUDA depth | SfM (`OPENCV` fallback) + Undistort `51.30 s`, Depth+Align+TSDF+Mesh `11.12 s`, **Total `62.42 s`** | `14/14` registered; `302,585` pts, `523,060` faces | **Whole-pipeline Peak RSS: `1,961.3 MB`** (`+1,372.6 MB` over baseline) |
+
+---
+
+## 7. Known Fundamental Limitations
+
+1. **Single-View Scale Ambiguity:** A single 2D image cannot uniquely determine metric scale; relative models (`Depth Anything V2 Small`, `DPT-Hybrid`) recover affine/ordinal structure only.
+2. **Hallucinated Occluded Surfaces:** Single-view back-projection observes only the front 2.5D visible shell; watertight meshers (Screened Poisson) hallucinate smooth bubbles over unobserved backsides.
+3. **Thin, Reflective & Transparent Structures:** Mirrors, glass, specular highlights, and fine foliage/wires violate Lambertian assumptions and cause depth bleeding or flying pixels.
+4. **Depth-Discontinuity Map Is Not Calibrated Uncertainty:** The spatial log-depth gradient map detects 1D occlusion jumps (`mean Spearman rho = +0.1083` vs. absolute error, `+0.1580` vs. relative error across `n=8` scenes) and does not predict planar bias on smooth walls.
+5. **Small Depth Benchmark ($n=8$):** Experiment A uses 8 indoor RGB-D scenes (`NYU V2`, `SUN RGB-D`, `TUM RGB-D`, 5× `Redwood`) due to local hardware constraints and is diagnostic, not statistically conclusive.
+6. **Fountain Reference Is Not Ground Truth:** `SampleFountainRGBDImages` (`key.log`, `integrated.ply`) is an RGB-D reconstruction; `~1°` two-view/SfM rotation error on Fountain reflects reference trajectory noise.
+7. **Multi-View Overlap & Registration Dependency:** Sparse SfM requires sufficient visual overlap and texture; disconnected or low-overlap view subsets (e.g., wide-baseline jumps in `ETH3D`) fail to register without dense visual overlap.
+8. **Monocular-Depth Fusion vs. True MVS:** HoloGen aligns pretrained monocular depth to sparse SfM points rather than solving dense PatchMatch stereo across epipolar lines; fine geometric details not captured by the monocular prior (or smoothed by TSDF voxelization) are coarser than full MVS.
+9. **ETH3D Alignment Sensitivity:** Because `ETH3D pipes` cameras are clustered in one half of the room (`collinearity SV ratio = 0.54`), centre-only `Sim(3)` Umeyama leaves residual global alignment drift (rigid ICP raises `N=14` AABB F1 from `0.276` to `0.473`).
+10. **Hardware Limits (7.7 GB RAM, 2 GB VRAM MX330):** Larger foundation models (`ZoeDepth`, `Metric3D`, `Depth Anything V2 Large/Giant`) and full-resolution PatchMatch MVS cannot run within 2 GB VRAM / 7.7 GB RAM, motivating the 640 px depth cap, sequential view-by-view TSDF streaming, and concurrency-1 job queue.

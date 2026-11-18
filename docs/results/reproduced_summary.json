@@ -1,0 +1,3051 @@
+{
+  "mode": "quick",
+  "environment": {
+    "timestamp_utc": "2026-11-18T16:08:45.310394+00:00",
+    "git_commit": "049f945",
+    "python_version": "3.10.11",
+    "platform": "Windows-10-10.0.26300-SP0",
+    "processor": "Intel64 Family 6 Model 140 Stepping 1, GenuineIntel",
+    "cpu_cores_logical": 8,
+    "total_ram_gb": 7.7,
+    "gpu": {
+      "name": "NVIDIA GeForce MX330",
+      "vram_mb": 2047.9,
+      "cuda_version": "12.1"
+    },
+    "package_versions": {
+      "torch": "2.4.1+cu121",
+      "transformers": "4.46.3",
+      "open3d": "0.19.0",
+      "trimesh": "4.5.3",
+      "opencv-python": "4.10.0.84",
+      "pycolmap": "3.11.1",
+      "fastapi": "0.115.6",
+      "numpy": "1.26.4",
+      "scipy": "1.14.1",
+      "scikit-learn": "not-installed",
+      "psutil": "6.1.0"
+    }
+  },
+  "scripts_executed": [
+    {
+      "script": "scripts/run_baseline.py",
+      "returncode": 0,
+      "ok": true
+    }
+  ],
+  "artifacts": {
+    "experiment_a": {
+      "experiment": "Experiment A: Depth Model & Edge-Preserving Refinement Benchmark",
+      "git_commit": "8f08ee7",
+      "device": "cuda",
+      "dataset": "8-Scene Calibrated Indoor RGB-D Suite (NYU Depth V2, SUN RGB-D, TUM RGB-D, Redwood Indoor 00-04)",
+      "models": [
+        {
+          "model_name": "depth_anything_v2_small",
+          "model_id": "depth-anything/Depth-Anything-V2-Small-hf",
+          "license": "Apache-2.0",
+          "is_metric": false,
+          "device": "cuda",
+          "alignment_mode": "disparity_scale_shift",
+          "eval_note": "Per-image least-squares scale-shift in disparity space",
+          "num_scenes": 8,
+          "mean_inference_ms": 359.27,
+          "peak_vram_mb": 243.57,
+          "abs_rel": 0.0945,
+          "sq_rel": 0.0619,
+          "rmse": 0.4139,
+          "rmse_log": 0.1619,
+          "delta_1": 0.8754,
+          "delta_2": 0.9573,
+          "delta_3": 0.9965,
+          "edge_f1": 0.6727,
+          "gradient_correlation": 0.3613,
+          "mean_uncertainty_proxy": 0.1048,
+          "per_scene": [
+            {
+              "scene_id": "nyu_depth_v2_office",
+              "dataset": "NYU_Depth_V2",
+              "inference_ms": 372.59,
+              "vram_mb": 243.57,
+              "abs_rel": 0.144,
+              "sq_rel": 0.1696,
+              "rmse": 0.8366,
+              "rmse_log": 0.2219,
+              "delta_1": 0.7869,
+              "delta_2": 0.9466,
+              "delta_3": 0.9758,
+              "edge_f1": 0.3709,
+              "gradient_correlation": 0.0027,
+              "num_valid_pixels": 285001,
+              "alignment_mode": "disparity_scale_shift",
+              "scale_factor": 0.038697,
+              "shift_factor": 0.213487
+            },
+            {
+              "scene_id": "sun_rgbd_bedroom",
+              "dataset": "SUN_RGBD",
+              "inference_ms": 354.38,
+              "vram_mb": 243.57,
+              "abs_rel": 0.0612,
+              "sq_rel": 0.0471,
+              "rmse": 0.4676,
+              "rmse_log": 0.093,
+              "delta_1": 0.9887,
+              "delta_2": 0.9945,
+              "delta_3": 0.9985,
+              "edge_f1": 0.6978,
+              "gradient_correlation": 0.3894,
+              "num_valid_pixels": 251188,
+              "alignment_mode": "disparity_scale_shift",
+              "scale_factor": 0.119511,
+              "shift_factor": 0.024013
+            },
+            {
+              "scene_id": "tum_rgbd_desk",
+              "dataset": "TUM_RGBD",
+              "inference_ms": 357.02,
+              "vram_mb": 243.57,
+              "abs_rel": 0.0337,
+              "sq_rel": 0.0227,
+              "rmse": 0.3036,
+              "rmse_log": 0.0704,
+              "delta_1": 0.9793,
+              "delta_2": 0.9963,
+              "delta_3": 0.9977,
+              "edge_f1": 0.5968,
+              "gradient_correlation": 0.2925,
+              "num_valid_pixels": 248250,
+              "alignment_mode": "disparity_scale_shift",
+              "scale_factor": 0.074266,
+              "shift_factor": 0.158563
+            },
+            {
+              "scene_id": "redwood_livingroom_00",
+              "dataset": "Redwood_Indoor_RGBD",
+              "inference_ms": 354.85,
+              "vram_mb": 243.57,
+              "abs_rel": 0.1092,
+              "sq_rel": 0.0563,
+              "rmse": 0.3574,
+              "rmse_log": 0.1918,
+              "delta_1": 0.8309,
+              "delta_2": 0.9392,
+              "delta_3": 1.0,
+              "edge_f1": 0.7667,
+              "gradient_correlation": 0.4526,
+              "num_valid_pixels": 267129,
+              "alignment_mode": "disparity_scale_shift",
+              "scale_factor": 0.099617,
+              "shift_factor": 0.342484
+            },
+            {
+              "scene_id": "redwood_livingroom_01",
+              "dataset": "Redwood_Indoor_RGBD",
+              "inference_ms": 362.63,
+              "vram_mb": 243.57,
+              "abs_rel": 0.1029,
+              "sq_rel": 0.0505,
+              "rmse": 0.3387,
+              "rmse_log": 0.1813,
+              "delta_1": 0.8469,
+              "delta_2": 0.9424,
+              "delta_3": 1.0,
+              "edge_f1": 0.7333,
+              "gradient_correlation": 0.4459,
+              "num_valid_pixels": 267728,
+              "alignment_mode": "disparity_scale_shift",
+              "scale_factor": 0.093685,
+              "shift_factor": 0.361481
+            },
+            {
+              "scene_id": "redwood_livingroom_02",
+              "dataset": "Redwood_Indoor_RGBD",
+              "inference_ms": 360.88,
+              "vram_mb": 243.57,
+              "abs_rel": 0.0974,
+              "sq_rel": 0.0469,
+              "rmse": 0.326,
+              "rmse_log": 0.1736,
+              "delta_1": 0.8522,
+              "delta_2": 0.9451,
+              "delta_3": 1.0,
+              "edge_f1": 0.7295,
+              "gradient_correlation": 0.4502,
+              "num_valid_pixels": 268183,
+              "alignment_mode": "disparity_scale_shift",
+              "scale_factor": 0.094957,
+              "shift_factor": 0.354596
+            },
+            {
+              "scene_id": "redwood_livingroom_03",
+              "dataset": "Redwood_Indoor_RGBD",
+              "inference_ms": 356.8,
+              "vram_mb": 243.57,
+              "abs_rel": 0.0978,
+              "sq_rel": 0.0478,
+              "rmse": 0.331,
+              "rmse_log": 0.1753,
+              "delta_1": 0.8645,
+              "delta_2": 0.9474,
+              "delta_3": 1.0,
+              "edge_f1": 0.7416,
+              "gradient_correlation": 0.4715,
+              "num_valid_pixels": 268620,
+              "alignment_mode": "disparity_scale_shift",
+              "scale_factor": 0.09132,
+              "shift_factor": 0.354919
+            },
+            {
+              "scene_id": "redwood_livingroom_04",
+              "dataset": "Redwood_Indoor_RGBD",
+              "inference_ms": 355.02,
+              "vram_mb": 243.57,
+              "abs_rel": 0.11,
+              "sq_rel": 0.0546,
+              "rmse": 0.3502,
+              "rmse_log": 0.1881,
+              "delta_1": 0.8536,
+              "delta_2": 0.9466,
+              "delta_3": 1.0,
+              "edge_f1": 0.7448,
+              "gradient_correlation": 0.3852,
+              "num_valid_pixels": 269051,
+              "alignment_mode": "disparity_scale_shift",
+              "scale_factor": 0.075391,
+              "shift_factor": 0.404426
+            }
+          ]
+        },
+        {
+          "model_name": "dpt_hybrid_midas",
+          "model_id": "Intel/dpt-hybrid-midas",
+          "license": "MIT",
+          "is_metric": false,
+          "device": "cuda",
+          "alignment_mode": "disparity_scale_shift",
+          "eval_note": "Per-image least-squares scale-shift in disparity space",
+          "num_scenes": 8,
+          "mean_inference_ms": 511.78,
+          "peak_vram_mb": 657.98,
+          "abs_rel": 0.1109,
+          "sq_rel": 0.093,
+          "rmse": 0.5181,
+          "rmse_log": 0.1606,
+          "delta_1": 0.9026,
+          "delta_2": 0.9652,
+          "delta_3": 0.9911,
+          "edge_f1": 0.6162,
+          "gradient_correlation": 0.3698,
+          "mean_uncertainty_proxy": 0.0954,
+          "per_scene": [
+            {
+              "scene_id": "nyu_depth_v2_office",
+              "dataset": "NYU_Depth_V2",
+              "inference_ms": 512.13,
+              "vram_mb": 657.98,
+              "abs_rel": 0.1584,
+              "sq_rel": 0.2136,
+              "rmse": 0.9462,
+              "rmse_log": 0.2422,
+              "delta_1": 0.7702,
+              "delta_2": 0.9098,
+              "delta_3": 0.9777,
+              "edge_f1": 0.3077,
+              "gradient_correlation": 0.0067,
+              "num_valid_pixels": 285001,
+              "alignment_mode": "disparity_scale_shift",
+              "scale_factor": 0.000136,
+              "shift_factor": 0.190563
+            },
+            {
+              "scene_id": "sun_rgbd_bedroom",
+              "dataset": "SUN_RGBD",
+              "inference_ms": 513.21,
+              "vram_mb": 657.98,
+              "abs_rel": 0.0988,
+              "sq_rel": 0.0772,
+              "rmse": 0.6115,
+              "rmse_log": 0.13,
+              "delta_1": 0.9554,
+              "delta_2": 0.988,
+              "delta_3": 0.9974,
+              "edge_f1": 0.6615,
+              "gradient_correlation": 0.3296,
+              "num_valid_pixels": 251188,
+              "alignment_mode": "disparity_scale_shift",
+              "scale_factor": 0.000254,
+              "shift_factor": 0.022649
+            },
+            {
+              "scene_id": "tum_rgbd_desk",
+              "dataset": "TUM_RGBD",
+              "inference_ms": 513.33,
+              "vram_mb": 657.98,
+              "abs_rel": 0.0417,
+              "sq_rel": 0.0378,
+              "rmse": 0.4397,
+              "rmse_log": 0.0958,
+              "delta_1": 0.975,
+              "delta_2": 0.9902,
+              "delta_3": 0.9912,
+              "edge_f1": 0.5328,
+              "gradient_correlation": 0.2574,
+              "num_valid_pixels": 248250,
+              "alignment_mode": "disparity_scale_shift",
+              "scale_factor": 0.000212,
+              "shift_factor": 0.131339
+            },
+            {
+              "scene_id": "redwood_livingroom_00",
+              "dataset": "Redwood_Indoor_RGBD",
+              "inference_ms": 509.08,
+              "vram_mb": 657.98,
+              "abs_rel": 0.127,
+              "sq_rel": 0.1039,
+              "rmse": 0.4871,
+              "rmse_log": 0.1781,
+              "delta_1": 0.8717,
+              "delta_2": 0.9621,
+              "delta_3": 0.986,
+              "edge_f1": 0.6955,
+              "gradient_correlation": 0.3994,
+              "num_valid_pixels": 267129,
+              "alignment_mode": "disparity_scale_shift",
+              "scale_factor": 0.000318,
+              "shift_factor": 0.17796
+            },
+            {
+              "scene_id": "redwood_livingroom_01",
+              "dataset": "Redwood_Indoor_RGBD",
+              "inference_ms": 510.84,
+              "vram_mb": 657.98,
+              "abs_rel": 0.1229,
+              "sq_rel": 0.1003,
+              "rmse": 0.4756,
+              "rmse_log": 0.1732,
+              "delta_1": 0.9045,
+              "delta_2": 0.9637,
+              "delta_3": 0.9855,
+              "edge_f1": 0.6716,
+              "gradient_correlation": 0.4409,
+              "num_valid_pixels": 267728,
+              "alignment_mode": "disparity_scale_shift",
+              "scale_factor": 0.000302,
+              "shift_factor": 0.18285
+            },
+            {
+              "scene_id": "redwood_livingroom_02",
+              "dataset": "Redwood_Indoor_RGBD",
+              "inference_ms": 511.15,
+              "vram_mb": 657.98,
+              "abs_rel": 0.1183,
+              "sq_rel": 0.0852,
+              "rmse": 0.4378,
+              "rmse_log": 0.1649,
+              "delta_1": 0.8968,
+              "delta_2": 0.9662,
+              "delta_3": 0.9931,
+              "edge_f1": 0.6932,
+              "gradient_correlation": 0.4737,
+              "num_valid_pixels": 268183,
+              "alignment_mode": "disparity_scale_shift",
+              "scale_factor": 0.000307,
+              "shift_factor": 0.179426
+            },
+            {
+              "scene_id": "redwood_livingroom_03",
+              "dataset": "Redwood_Indoor_RGBD",
+              "inference_ms": 508.63,
+              "vram_mb": 657.98,
+              "abs_rel": 0.1114,
+              "sq_rel": 0.0609,
+              "rmse": 0.3657,
+              "rmse_log": 0.15,
+              "delta_1": 0.9204,
+              "delta_2": 0.9734,
+              "delta_3": 1.0,
+              "edge_f1": 0.6877,
+              "gradient_correlation": 0.5317,
+              "num_valid_pixels": 268620,
+              "alignment_mode": "disparity_scale_shift",
+              "scale_factor": 0.000269,
+              "shift_factor": 0.228121
+            },
+            {
+              "scene_id": "redwood_livingroom_04",
+              "dataset": "Redwood_Indoor_RGBD",
+              "inference_ms": 515.84,
+              "vram_mb": 657.98,
+              "abs_rel": 0.1083,
+              "sq_rel": 0.0654,
+              "rmse": 0.3816,
+              "rmse_log": 0.1505,
+              "delta_1": 0.9269,
+              "delta_2": 0.9685,
+              "delta_3": 0.9979,
+              "edge_f1": 0.6798,
+              "gradient_correlation": 0.5187,
+              "num_valid_pixels": 269051,
+              "alignment_mode": "disparity_scale_shift",
+              "scale_factor": 0.000282,
+              "shift_factor": 0.200762
+            }
+          ]
+        },
+        {
+          "model_name": "depth_anything_v2_metric_indoor_small",
+          "model_id": "depth-anything/Depth-Anything-V2-Metric-Indoor-Small-hf",
+          "license": "Apache-2.0",
+          "is_metric": true,
+          "device": "cuda",
+          "alignment_mode": "none",
+          "eval_note": "Direct unaligned metric prediction (meters)",
+          "num_scenes": 8,
+          "mean_inference_ms": 355.34,
+          "peak_vram_mb": 244.2,
+          "abs_rel": 0.2944,
+          "sq_rel": 0.2588,
+          "rmse": 0.7036,
+          "rmse_log": 0.2732,
+          "delta_1": 0.299,
+          "delta_2": 0.966,
+          "delta_3": 0.9948,
+          "edge_f1": 0.6449,
+          "gradient_correlation": 0.3041,
+          "mean_uncertainty_proxy": 0.1569,
+          "per_scene": [
+            {
+              "scene_id": "nyu_depth_v2_office",
+              "dataset": "NYU_Depth_V2",
+              "inference_ms": 354.02,
+              "vram_mb": 244.2,
+              "abs_rel": 0.488,
+              "sq_rel": 0.9641,
+              "rmse": 1.7689,
+              "rmse_log": 0.4253,
+              "delta_1": 0.0964,
+              "delta_2": 0.8798,
+              "delta_3": 0.9668,
+              "edge_f1": 0.394,
+              "gradient_correlation": 0.0101,
+              "num_valid_pixels": 285001,
+              "alignment_mode": "none",
+              "scale_factor": 1.0,
+              "shift_factor": 0.0
+            },
+            {
+              "scene_id": "sun_rgbd_bedroom",
+              "dataset": "SUN_RGBD",
+              "inference_ms": 355.61,
+              "vram_mb": 244.2,
+              "abs_rel": 0.1665,
+              "sq_rel": 0.095,
+              "rmse": 0.5158,
+              "rmse_log": 0.1796,
+              "delta_1": 0.7749,
+              "delta_2": 0.994,
+              "delta_3": 0.9952,
+              "edge_f1": 0.6988,
+              "gradient_correlation": 0.3884,
+              "num_valid_pixels": 251188,
+              "alignment_mode": "none",
+              "scale_factor": 1.0,
+              "shift_factor": 0.0
+            },
+            {
+              "scene_id": "tum_rgbd_desk",
+              "dataset": "TUM_RGBD",
+              "inference_ms": 357.2,
+              "vram_mb": 244.2,
+              "abs_rel": 0.1163,
+              "sq_rel": 0.0594,
+              "rmse": 0.3857,
+              "rmse_log": 0.1258,
+              "delta_1": 0.9834,
+              "delta_2": 0.995,
+              "delta_3": 0.9973,
+              "edge_f1": 0.5799,
+              "gradient_correlation": 0.2823,
+              "num_valid_pixels": 248250,
+              "alignment_mode": "none",
+              "scale_factor": 1.0,
+              "shift_factor": 0.0
+            },
+            {
+              "scene_id": "redwood_livingroom_00",
+              "dataset": "Redwood_Indoor_RGBD",
+              "inference_ms": 358.26,
+              "vram_mb": 244.2,
+              "abs_rel": 0.3385,
+              "sq_rel": 0.2164,
+              "rmse": 0.6283,
+              "rmse_log": 0.3071,
+              "delta_1": 0.0736,
+              "delta_2": 0.9613,
+              "delta_3": 0.9998,
+              "edge_f1": 0.7041,
+              "gradient_correlation": 0.3496,
+              "num_valid_pixels": 267129,
+              "alignment_mode": "none",
+              "scale_factor": 1.0,
+              "shift_factor": 0.0
+            },
+            {
+              "scene_id": "redwood_livingroom_01",
+              "dataset": "Redwood_Indoor_RGBD",
+              "inference_ms": 356.07,
+              "vram_mb": 244.2,
+              "abs_rel": 0.3203,
+              "sq_rel": 0.1916,
+              "rmse": 0.5908,
+              "rmse_log": 0.2933,
+              "delta_1": 0.0734,
+              "delta_2": 0.9666,
+              "delta_3": 0.9998,
+              "edge_f1": 0.6968,
+              "gradient_correlation": 0.3488,
+              "num_valid_pixels": 267728,
+              "alignment_mode": "none",
+              "scale_factor": 1.0,
+              "shift_factor": 0.0
+            },
+            {
+              "scene_id": "redwood_livingroom_02",
+              "dataset": "Redwood_Indoor_RGBD",
+              "inference_ms": 352.02,
+              "vram_mb": 244.2,
+              "abs_rel": 0.2987,
+              "sq_rel": 0.1697,
+              "rmse": 0.5612,
+              "rmse_log": 0.2791,
+              "delta_1": 0.1808,
+              "delta_2": 0.9709,
+              "delta_3": 1.0,
+              "edge_f1": 0.7031,
+              "gradient_correlation": 0.3461,
+              "num_valid_pixels": 268183,
+              "alignment_mode": "none",
+              "scale_factor": 1.0,
+              "shift_factor": 0.0
+            },
+            {
+              "scene_id": "redwood_livingroom_03",
+              "dataset": "Redwood_Indoor_RGBD",
+              "inference_ms": 355.48,
+              "vram_mb": 244.2,
+              "abs_rel": 0.3167,
+              "sq_rel": 0.191,
+              "rmse": 0.5964,
+              "rmse_log": 0.29,
+              "delta_1": 0.0976,
+              "delta_2": 0.9844,
+              "delta_3": 0.9998,
+              "edge_f1": 0.6936,
+              "gradient_correlation": 0.3765,
+              "num_valid_pixels": 268620,
+              "alignment_mode": "none",
+              "scale_factor": 1.0,
+              "shift_factor": 0.0
+            },
+            {
+              "scene_id": "redwood_livingroom_04",
+              "dataset": "Redwood_Indoor_RGBD",
+              "inference_ms": 354.07,
+              "vram_mb": 244.2,
+              "abs_rel": 0.3102,
+              "sq_rel": 0.1831,
+              "rmse": 0.5815,
+              "rmse_log": 0.2857,
+              "delta_1": 0.1119,
+              "delta_2": 0.9762,
+              "delta_3": 0.9995,
+              "edge_f1": 0.6886,
+              "gradient_correlation": 0.3306,
+              "num_valid_pixels": 269051,
+              "alignment_mode": "none",
+              "scale_factor": 1.0,
+              "shift_factor": 0.0
+            }
+          ]
+        },
+        {
+          "model_name": "depth_anything_v2_metric_indoor_small",
+          "model_id": "depth-anything/Depth-Anything-V2-Metric-Indoor-Small-hf",
+          "license": "Apache-2.0",
+          "is_metric": true,
+          "device": "cuda",
+          "alignment_mode": "depth_scale_shift",
+          "eval_note": "Metric prediction + per-image scale-shift alignment",
+          "num_scenes": 8,
+          "mean_inference_ms": 356.68,
+          "peak_vram_mb": 244.2,
+          "abs_rel": 0.1185,
+          "sq_rel": 0.0665,
+          "rmse": 0.3818,
+          "rmse_log": 0.1705,
+          "delta_1": 0.8257,
+          "delta_2": 0.9692,
+          "delta_3": 0.9961,
+          "edge_f1": 0.641,
+          "gradient_correlation": 0.3026,
+          "mean_uncertainty_proxy": 0.1569,
+          "per_scene": [
+            {
+              "scene_id": "nyu_depth_v2_office",
+              "dataset": "NYU_Depth_V2",
+              "inference_ms": 352.02,
+              "vram_mb": 244.2,
+              "abs_rel": 0.151,
+              "sq_rel": 0.1683,
+              "rmse": 0.7332,
+              "rmse_log": 0.2237,
+              "delta_1": 0.8691,
+              "delta_2": 0.937,
+              "delta_3": 0.9736,
+              "edge_f1": 0.4077,
+              "gradient_correlation": 0.0107,
+              "num_valid_pixels": 285001,
+              "alignment_mode": "depth_scale_shift",
+              "scale_factor": 0.544752,
+              "shift_factor": 0.838862
+            },
+            {
+              "scene_id": "sun_rgbd_bedroom",
+              "dataset": "SUN_RGBD",
+              "inference_ms": 358.84,
+              "vram_mb": 244.2,
+              "abs_rel": 0.0626,
+              "sq_rel": 0.0285,
+              "rmse": 0.2895,
+              "rmse_log": 0.0912,
+              "delta_1": 0.9924,
+              "delta_2": 0.9946,
+              "delta_3": 0.9977,
+              "edge_f1": 0.6993,
+              "gradient_correlation": 0.3836,
+              "num_valid_pixels": 251188,
+              "alignment_mode": "depth_scale_shift",
+              "scale_factor": 0.931232,
+              "shift_factor": -0.166482
+            },
+            {
+              "scene_id": "tum_rgbd_desk",
+              "dataset": "TUM_RGBD",
+              "inference_ms": 362.22,
+              "vram_mb": 244.2,
+              "abs_rel": 0.0331,
+              "sq_rel": 0.023,
+              "rmse": 0.2566,
+              "rmse_log": 0.0677,
+              "delta_1": 0.9885,
+              "delta_2": 0.9959,
+              "delta_3": 0.9975,
+              "edge_f1": 0.5802,
+              "gradient_correlation": 0.2818,
+              "num_valid_pixels": 248250,
+              "alignment_mode": "depth_scale_shift",
+              "scale_factor": 0.890477,
+              "shift_factor": 0.026334
+            },
+            {
+              "scene_id": "redwood_livingroom_00",
+              "dataset": "Redwood_Indoor_RGBD",
+              "inference_ms": 355.73,
+              "vram_mb": 244.2,
+              "abs_rel": 0.1471,
+              "sq_rel": 0.0674,
+              "rmse": 0.3671,
+              "rmse_log": 0.2047,
+              "delta_1": 0.7247,
+              "delta_2": 0.9609,
+              "delta_3": 1.0,
+              "edge_f1": 0.692,
+              "gradient_correlation": 0.3484,
+              "num_valid_pixels": 267129,
+              "alignment_mode": "depth_scale_shift",
+              "scale_factor": 0.488868,
+              "shift_factor": 0.704679
+            },
+            {
+              "scene_id": "redwood_livingroom_01",
+              "dataset": "Redwood_Indoor_RGBD",
+              "inference_ms": 358.14,
+              "vram_mb": 244.2,
+              "abs_rel": 0.1439,
+              "sq_rel": 0.0646,
+              "rmse": 0.3607,
+              "rmse_log": 0.2001,
+              "delta_1": 0.739,
+              "delta_2": 0.9629,
+              "delta_3": 1.0,
+              "edge_f1": 0.689,
+              "gradient_correlation": 0.3481,
+              "num_valid_pixels": 267728,
+              "alignment_mode": "depth_scale_shift",
+              "scale_factor": 0.50868,
+              "shift_factor": 0.678419
+            },
+            {
+              "scene_id": "redwood_livingroom_02",
+              "dataset": "Redwood_Indoor_RGBD",
+              "inference_ms": 354.26,
+              "vram_mb": 244.2,
+              "abs_rel": 0.1409,
+              "sq_rel": 0.0631,
+              "rmse": 0.3564,
+              "rmse_log": 0.1974,
+              "delta_1": 0.7435,
+              "delta_2": 0.9657,
+              "delta_3": 1.0,
+              "edge_f1": 0.6944,
+              "gradient_correlation": 0.3444,
+              "num_valid_pixels": 268183,
+              "alignment_mode": "depth_scale_shift",
+              "scale_factor": 0.497796,
+              "shift_factor": 0.724984
+            },
+            {
+              "scene_id": "redwood_livingroom_03",
+              "dataset": "Redwood_Indoor_RGBD",
+              "inference_ms": 352.71,
+              "vram_mb": 244.2,
+              "abs_rel": 0.1349,
+              "sq_rel": 0.0588,
+              "rmse": 0.3467,
+              "rmse_log": 0.1905,
+              "delta_1": 0.7732,
+              "delta_2": 0.9674,
+              "delta_3": 1.0,
+              "edge_f1": 0.686,
+              "gradient_correlation": 0.3749,
+              "num_valid_pixels": 268620,
+              "alignment_mode": "depth_scale_shift",
+              "scale_factor": 0.479386,
+              "shift_factor": 0.742577
+            },
+            {
+              "scene_id": "redwood_livingroom_04",
+              "dataset": "Redwood_Indoor_RGBD",
+              "inference_ms": 359.52,
+              "vram_mb": 244.2,
+              "abs_rel": 0.1343,
+              "sq_rel": 0.0583,
+              "rmse": 0.3444,
+              "rmse_log": 0.1889,
+              "delta_1": 0.7751,
+              "delta_2": 0.969,
+              "delta_3": 1.0,
+              "edge_f1": 0.6791,
+              "gradient_correlation": 0.329,
+              "num_valid_pixels": 269051,
+              "alignment_mode": "depth_scale_shift",
+              "scale_factor": 0.481234,
+              "shift_factor": 0.746106
+            }
+          ]
+        }
+      ],
+      "refinement_ablation": [
+        {
+          "refinement_method": "none",
+          "mean_refinement_ms": 8.768,
+          "abs_rel": 0.0945,
+          "rmse": 0.4139,
+          "delta_1": 0.8754,
+          "edge_f1": 0.6727,
+          "gradient_correlation": 0.3613
+        },
+        {
+          "refinement_method": "bilateral",
+          "mean_refinement_ms": 19.128,
+          "abs_rel": 0.0945,
+          "rmse": 0.4136,
+          "delta_1": 0.8754,
+          "edge_f1": 0.6544,
+          "gradient_correlation": 0.356
+        },
+        {
+          "refinement_method": "guided",
+          "mean_refinement_ms": 23.567,
+          "abs_rel": 0.0949,
+          "rmse": 0.4121,
+          "delta_1": 0.8731,
+          "edge_f1": 0.5873,
+          "gradient_correlation": 0.3503
+        },
+        {
+          "refinement_method": "guided_bilateral",
+          "mean_refinement_ms": 27.731,
+          "abs_rel": 0.0949,
+          "rmse": 0.4119,
+          "delta_1": 0.8731,
+          "edge_f1": 0.5841,
+          "gradient_correlation": 0.3488
+        }
+      ]
+    },
+    "experiment_b": {
+      "experiment": "Experiment B: Surface Mesh Reconstruction Methods Comparison & Alpha Sweep",
+      "git_commit": "5dc51e2",
+      "reference_note": "Reference is the input cleaned point cloud (not external ground-truth scan); metrics measure geometric fidelity to the input cloud.",
+      "input_image": "sample_02_aloe_indoor.jpg",
+      "processed_resolution": "480x416",
+      "reference_clean_cloud_points": 169146,
+      "completeness_threshold_tau": 0.04,
+      "methods": [
+        {
+          "method": "1_depth_grid_discontinuity_cut",
+          "time_ms": 45.45,
+          "num_vertices": 199680,
+          "num_faces": 375945,
+          "num_connected_components": 49,
+          "num_boundary_edges": 10703,
+          "num_interior_holes": 38,
+          "completeness_pct": 100.0,
+          "surface_noise_rms": 0.17141,
+          "chamfer_l2": 0.0857,
+          "hausdorff_95": 0.31502,
+          "threshold_tau": 0.04,
+          "ply_file": "1_depth_grid_discontinuity_cut.ply",
+          "preview_png": "1_depth_grid_discontinuity_cut_preview.png"
+        },
+        {
+          "method": "2_depth_grid_cleaned_repaired",
+          "time_ms": 1910.82,
+          "num_vertices": 193173,
+          "num_faces": 375889,
+          "num_connected_components": 8,
+          "num_boundary_edges": 10477,
+          "num_interior_holes": 10,
+          "completeness_pct": 99.44,
+          "surface_noise_rms": 0.12919,
+          "chamfer_l2": 0.07021,
+          "hausdorff_95": 0.20289,
+          "threshold_tau": 0.04,
+          "ply_file": "2_depth_grid_cleaned_repaired.ply",
+          "preview_png": "2_depth_grid_cleaned_repaired_preview.png"
+        },
+        {
+          "method": "3_poisson_depth8_untrimmed",
+          "time_ms": 1306.31,
+          "num_vertices": 80655,
+          "num_faces": 161122,
+          "num_connected_components": 7,
+          "num_boundary_edges": 198,
+          "num_interior_holes": 0,
+          "completeness_pct": 98.79,
+          "surface_noise_rms": 0.59246,
+          "chamfer_l2": 0.30601,
+          "hausdorff_95": 1.62186,
+          "threshold_tau": 0.04,
+          "ply_file": "3_poisson_depth8_untrimmed.ply",
+          "preview_png": "3_poisson_depth8_untrimmed_preview.png"
+        },
+        {
+          "method": "4_poisson_depth8_trimmed_q08",
+          "time_ms": 1327.6,
+          "num_vertices": 74200,
+          "num_faces": 146551,
+          "num_connected_components": 10,
+          "num_boundary_edges": 1857,
+          "num_interior_holes": 7,
+          "completeness_pct": 98.81,
+          "surface_noise_rms": 0.06388,
+          "chamfer_l2": 0.04146,
+          "hausdorff_95": 0.1576,
+          "threshold_tau": 0.04,
+          "ply_file": "4_poisson_depth8_trimmed_q08.ply",
+          "preview_png": "4_poisson_depth8_trimmed_q08_preview.png"
+        },
+        {
+          "method": "5_ball_pivoting",
+          "time_ms": 201.4,
+          "num_vertices": 11758,
+          "num_faces": 19137,
+          "num_connected_components": 82,
+          "num_boundary_edges": 2537,
+          "num_interior_holes": 110,
+          "completeness_pct": 96.14,
+          "surface_noise_rms": 0.02313,
+          "chamfer_l2": 0.02295,
+          "hausdorff_95": 0.04056,
+          "threshold_tau": 0.04,
+          "ply_file": "5_ball_pivoting.ply",
+          "preview_png": "5_ball_pivoting_preview.png"
+        },
+        {
+          "method": "6_alpha_shape_best_a0.12",
+          "time_ms": 154.48,
+          "num_vertices": 5898,
+          "num_faces": 12366,
+          "num_connected_components": 359,
+          "num_boundary_edges": 0,
+          "num_interior_holes": 0,
+          "completeness_pct": 76.11,
+          "surface_noise_rms": 0.02395,
+          "chamfer_l2": 0.03461,
+          "hausdorff_95": 0.09144,
+          "threshold_tau": 0.04,
+          "ply_file": "6_alpha_shape_best_a0.12.ply",
+          "preview_png": "6_alpha_shape_best_a0.12_preview.png"
+        }
+      ],
+      "alpha_shape_sweep": [
+        {
+          "alpha": 0.06,
+          "method": "alpha_shape_a0.06",
+          "time_ms": 146.46,
+          "num_vertices": 366,
+          "num_faces": 422,
+          "num_connected_components": 78,
+          "num_boundary_edges": 0,
+          "num_interior_holes": 0,
+          "completeness_pct": 6.66,
+          "surface_noise_rms": 0.01752,
+          "chamfer_l2": 0.32926,
+          "hausdorff_95": 1.32153,
+          "threshold_tau": 0.04
+        },
+        {
+          "alpha": 0.09,
+          "method": "alpha_shape_a0.09",
+          "time_ms": 149.03,
+          "num_vertices": 4117,
+          "num_faces": 6844,
+          "num_connected_components": 535,
+          "num_boundary_edges": 0,
+          "num_interior_holes": 0,
+          "completeness_pct": 52.57,
+          "surface_noise_rms": 0.02103,
+          "chamfer_l2": 0.0612,
+          "hausdorff_95": 0.22678,
+          "threshold_tau": 0.04
+        },
+        {
+          "alpha": 0.12,
+          "method": "alpha_shape_a0.12",
+          "time_ms": 154.48,
+          "num_vertices": 5898,
+          "num_faces": 12366,
+          "num_connected_components": 359,
+          "num_boundary_edges": 0,
+          "num_interior_holes": 0,
+          "completeness_pct": 76.11,
+          "surface_noise_rms": 0.02395,
+          "chamfer_l2": 0.03461,
+          "hausdorff_95": 0.09144,
+          "threshold_tau": 0.04
+        },
+        {
+          "alpha": 0.18,
+          "method": "alpha_shape_a0.18",
+          "time_ms": 156.21,
+          "num_vertices": 6374,
+          "num_faces": 15070,
+          "num_connected_components": 139,
+          "num_boundary_edges": 0,
+          "num_interior_holes": 0,
+          "completeness_pct": 79.42,
+          "surface_noise_rms": 0.03276,
+          "chamfer_l2": 0.0367,
+          "hausdorff_95": 0.07802,
+          "threshold_tau": 0.04
+        },
+        {
+          "alpha": 0.3,
+          "method": "alpha_shape_a0.30",
+          "time_ms": 145.29,
+          "num_vertices": 5915,
+          "num_faces": 14074,
+          "num_connected_components": 29,
+          "num_boundary_edges": 0,
+          "num_interior_holes": 0,
+          "completeness_pct": 70.83,
+          "surface_noise_rms": 0.05656,
+          "chamfer_l2": 0.05514,
+          "hausdorff_95": 0.12986,
+          "threshold_tau": 0.04
+        }
+      ]
+    },
+    "experiment_c": {
+      "experiment": "Experiment C: Point Cloud Filtering, Normal Orientation & Smoothing Ablation",
+      "git_commit": "a37b99e",
+      "input_image": "sample_02_aloe_indoor.jpg",
+      "processed_resolution": "512x443",
+      "depth_model": "depth_anything_v2_small",
+      "variants": [
+        {
+          "variant": "1_raw_backprojected",
+          "parameters": {
+            "description": "Unfiltered back-projected cloud with PCA camera-oriented normals"
+          },
+          "num_points": 226816,
+          "retention_pct": 100.0,
+          "processing_time_ms": 369.53,
+          "nn_distance_mean": 0.01562,
+          "nn_distance_std": 0.01682,
+          "nn_distance_p95": 0.02697,
+          "estimated_surface_density": 1445.0,
+          "bbox_extent": [
+            11.412,
+            7.368,
+            9.0
+          ],
+          "ply_file": "1_raw_backprojected.ply",
+          "preview_png": "1_raw_backprojected_preview.png"
+        },
+        {
+          "variant": "2_voxel_downsampled",
+          "parameters": {
+            "voxel_size": 0.035
+          },
+          "num_points": 75185,
+          "retention_pct": 33.15,
+          "processing_time_ms": 64.03,
+          "nn_distance_mean": 0.03131,
+          "nn_distance_std": 0.02428,
+          "nn_distance_p95": 0.05316,
+          "estimated_surface_density": 426.2,
+          "bbox_extent": [
+            11.412,
+            7.368,
+            9.0
+          ],
+          "ply_file": "2_voxel_downsampled.ply",
+          "preview_png": "2_voxel_downsampled_preview.png"
+        },
+        {
+          "variant": "3_statistical_outlier_removal",
+          "parameters": {
+            "nb_neighbors": 20,
+            "std_ratio": 2.0
+          },
+          "num_points": 221193,
+          "retention_pct": 97.52,
+          "processing_time_ms": 257.01,
+          "nn_distance_mean": 0.01398,
+          "nn_distance_std": 0.00804,
+          "nn_distance_p95": 0.02463,
+          "estimated_surface_density": 1532.5,
+          "bbox_extent": [
+            10.126,
+            6.988,
+            9.0
+          ],
+          "ply_file": "3_statistical_outlier_removal.ply",
+          "preview_png": "3_statistical_outlier_removal_preview.png"
+        },
+        {
+          "variant": "4_radius_outlier_removal",
+          "parameters": {
+            "nb_points": 12,
+            "radius": 0.05466
+          },
+          "num_points": 200667,
+          "retention_pct": 88.47,
+          "processing_time_ms": 932.62,
+          "nn_distance_mean": 0.01297,
+          "nn_distance_std": 0.00717,
+          "nn_distance_p95": 0.02247,
+          "estimated_surface_density": 1736.1,
+          "bbox_extent": [
+            10.039,
+            6.933,
+            9.0
+          ],
+          "ply_file": "4_radius_outlier_removal.ply",
+          "preview_png": "4_radius_outlier_removal_preview.png"
+        },
+        {
+          "variant": "5_sor_plus_normal_grazing_filter",
+          "parameters": {
+            "nb_neighbors": 20,
+            "std_ratio": 2.0,
+            "max_grazing_angle_deg": 80.0,
+            "min_cos_theta": 0.1736
+          },
+          "num_points": 196346,
+          "retention_pct": 86.57,
+          "processing_time_ms": 272.71,
+          "nn_distance_mean": 0.01429,
+          "nn_distance_std": 0.0081,
+          "nn_distance_p95": 0.02441,
+          "estimated_surface_density": 1305.4,
+          "bbox_extent": [
+            10.126,
+            6.988,
+            9.0
+          ],
+          "ply_file": "5_sor_plus_normal_grazing_filter.ply",
+          "preview_png": "5_sor_plus_normal_grazing_filter_preview.png"
+        },
+        {
+          "variant": "6_full_cleaned_and_smoothed",
+          "parameters": {
+            "nb_neighbors": 20,
+            "std_ratio": 2.0,
+            "max_grazing_angle_deg": 80.0,
+            "min_cos_theta": 0.1736,
+            "alpha": 0.35,
+            "k_neighbors": 9
+          },
+          "num_points": 196346,
+          "retention_pct": 86.57,
+          "processing_time_ms": 455.55,
+          "nn_distance_mean": 0.01416,
+          "nn_distance_std": 0.00795,
+          "nn_distance_p95": 0.02418,
+          "estimated_surface_density": 1332.8,
+          "bbox_extent": [
+            10.123,
+            6.964,
+            9.002
+          ],
+          "ply_file": "6_full_cleaned_and_smoothed.ply",
+          "preview_png": "6_full_cleaned_and_smoothed_preview.png"
+        }
+      ]
+    },
+    "phase_7b5": {
+      "phase": "phase_7b5_fixup_benchmark",
+      "peak_rss_mb": 224.28,
+      "sfm_camera_policy_and_undistortion": [
+        {
+          "case": "fountain_all33_auto_policy",
+          "pose_semantics": "reference_rgbd_trajectory (key.log)",
+          "sfm": {
+            "num_input_images": 33,
+            "num_registered_images": 33,
+            "unregistered_images": [],
+            "registration_ratio": 1.0,
+            "shared_camera_model": "SIMPLE_RADIAL",
+            "fallback_triggered": false,
+            "undistorted": true,
+            "single_camera_mode": true,
+            "sfm_max_image_size": 1600,
+            "shared_intrinsics": {
+              "width": 642,
+              "height": 480,
+              "fx": 537.063,
+              "fy": 537.063,
+              "cx": 321.0,
+              "cy": 240.0,
+              "source": "pycolmap_PINHOLE",
+              "fov_x_deg": 61.733,
+              "fov_y_deg": 48.157,
+              "K": [
+                [
+                  537.063,
+                  0.0,
+                  321.0
+                ],
+                [
+                  0.0,
+                  537.063,
+                  240.0
+                ],
+                [
+                  0.0,
+                  0.0,
+                  1.0
+                ]
+              ]
+            },
+            "num_sparse_points": 11657,
+            "mean_reprojection_error_px": 0.6299,
+            "mean_track_length": 5.203,
+            "feature_extraction_ms": 7074.86,
+            "feature_matching_ms": 58676.28,
+            "incremental_mapping_ms": 23756.15,
+            "undistortion_ms": 477.71,
+            "total_runtime_ms": 91105.18,
+            "peak_ram_mb": 737.4,
+            "peak_ram_above_baseline_mb": 362.5,
+            "ram_measurement": "process RSS sampled every 20 ms by a background thread during SfM"
+          },
+          "pose_eval": {
+            "num_aligned_cameras": 33,
+            "umeyama_scale": 0.16815,
+            "camera_center_ate_rmse": 0.0157,
+            "camera_center_ate_mean": 0.01399,
+            "camera_center_ate_median": 0.01345,
+            "trajectory_collinearity_sv_ratio": 0.54672,
+            "aligned_rotation_error_mean_deg": 1.0163,
+            "aligned_rotation_error_median_deg": 0.8668,
+            "rotation_error_after_best_global_rotation_mean_deg": 0.9053,
+            "pairwise_relative_rotation_error_mean_deg": 1.1238,
+            "pairwise_relative_translation_dir_error_mean_deg": 4.8146
+          }
+        },
+        {
+          "case": "eth3d_pipes_all14_auto_policy",
+          "pose_semantics": "eth3d_ground_truth_calibrated_pose",
+          "sfm": {
+            "num_input_images": 14,
+            "num_registered_images": 14,
+            "unregistered_images": [],
+            "registration_ratio": 1.0,
+            "shared_camera_model": "OPENCV",
+            "fallback_triggered": true,
+            "undistorted": true,
+            "single_camera_mode": true,
+            "sfm_max_image_size": 1600,
+            "shared_intrinsics": {
+              "width": 1600,
+              "height": 1066,
+              "fx": 884.6101,
+              "fy": 891.9482,
+              "cx": 800.0,
+              "cy": 533.0,
+              "source": "pycolmap_PINHOLE",
+              "fov_x_deg": 84.249,
+              "fov_y_deg": 61.722,
+              "K": [
+                [
+                  884.6101,
+                  0.0,
+                  800.0
+                ],
+                [
+                  0.0,
+                  891.9482,
+                  533.0
+                ],
+                [
+                  0.0,
+                  0.0,
+                  1.0
+                ]
+              ]
+            },
+            "num_sparse_points": 1193,
+            "mean_reprojection_error_px": 0.3849,
+            "mean_track_length": 3.417,
+            "feature_extraction_ms": 25649.27,
+            "feature_matching_ms": 15110.05,
+            "incremental_mapping_ms": 5784.78,
+            "undistortion_ms": 757.29,
+            "total_runtime_ms": 52505.23,
+            "peak_ram_mb": 1968.04,
+            "peak_ram_above_baseline_mb": 1761.76,
+            "ram_measurement": "process RSS sampled every 20 ms by a background thread during SfM"
+          },
+          "pose_eval": {
+            "num_aligned_cameras": 14,
+            "umeyama_scale": 0.19388,
+            "camera_center_ate_rmse": 0.00666,
+            "camera_center_ate_mean": 0.00603,
+            "camera_center_ate_median": 0.00596,
+            "trajectory_collinearity_sv_ratio": 0.54245,
+            "aligned_rotation_error_mean_deg": 0.4603,
+            "aligned_rotation_error_median_deg": 0.4658,
+            "rotation_error_after_best_global_rotation_mean_deg": 0.1806,
+            "pairwise_relative_rotation_error_mean_deg": 0.1709,
+            "pairwise_relative_translation_dir_error_mean_deg": 0.4938
+          }
+        }
+      ],
+      "two_view_multiseed_benchmarks": [
+        {
+          "scene": "fountain_10pairs_x_3seeds",
+          "pose_semantics": "reference_rgbd_trajectory (key.log)",
+          "num_pairs": 10,
+          "pair_names": [
+            "fountain_00_vs_02",
+            "fountain_02_vs_04",
+            "fountain_04_vs_06",
+            "fountain_06_vs_08",
+            "fountain_08_vs_10",
+            "fountain_10_vs_12",
+            "fountain_12_vs_14",
+            "fountain_14_vs_16",
+            "fountain_16_vs_18",
+            "fountain_18_vs_20"
+          ],
+          "seeds": [
+            42,
+            101,
+            2026
+          ],
+          "sampson_threshold_px": 1.5,
+          "summary_median_iqr": {
+            "from_scratch_8pt_no_gn": {
+              "num_runs": 30,
+              "rotation_error_deg": {
+                "median": 1.0124,
+                "iqr": 0.3383,
+                "q25": 0.8957,
+                "q75": 1.234
+              },
+              "translation_direction_error_deg": {
+                "median": 5.8355,
+                "iqr": 4.4245,
+                "q25": 2.4958,
+                "q75": 6.9203
+              },
+              "reprojection_rmse_px": {
+                "median": 2.5917,
+                "iqr": 2.6571,
+                "q25": 1.181,
+                "q75": 3.8381
+              },
+              "runtime_ms": {
+                "median": 80.8938,
+                "iqr": 81.7983,
+                "q25": 49.8196,
+                "q75": 131.6179
+              },
+              "num_inliers": {
+                "median": 443.0,
+                "iqr": 433.5,
+                "q25": 216.0,
+                "q75": 649.5
+              }
+            },
+            "from_scratch_8pt_with_gn": {
+              "num_runs": 30,
+              "rotation_error_deg": {
+                "median": 1.0116,
+                "iqr": 0.617,
+                "q25": 0.7897,
+                "q75": 1.4067
+              },
+              "translation_direction_error_deg": {
+                "median": 3.5898,
+                "iqr": 2.0765,
+                "q25": 2.2115,
+                "q75": 4.288
+              },
+              "reprojection_rmse_px": {
+                "median": 0.2466,
+                "iqr": 0.0777,
+                "q25": 0.198,
+                "q75": 0.2757
+              },
+              "runtime_ms": {
+                "median": 102.4153,
+                "iqr": 88.3485,
+                "q25": 66.5922,
+                "q75": 154.9407
+              },
+              "num_inliers": {
+                "median": 443.0,
+                "iqr": 433.5,
+                "q25": 216.0,
+                "q75": 649.5
+              }
+            },
+            "opencv_5pt_baseline": {
+              "num_runs": 30,
+              "rotation_error_deg": {
+                "median": 1.0218,
+                "iqr": 0.8291,
+                "q25": 0.7503,
+                "q75": 1.5794
+              },
+              "translation_direction_error_deg": {
+                "median": 3.5164,
+                "iqr": 5.642,
+                "q25": 2.9307,
+                "q75": 8.5727
+              },
+              "reprojection_rmse_px": {
+                "median": 0.3615,
+                "iqr": 0.149,
+                "q25": 0.2815,
+                "q75": 0.4305
+              },
+              "runtime_ms": {
+                "median": 19.2775,
+                "iqr": 22.6697,
+                "q25": 13.0001,
+                "q75": 35.6698
+              },
+              "num_inliers": {
+                "median": 428.0,
+                "iqr": 421.0,
+                "q25": 206.0,
+                "q75": 627.0
+              }
+            },
+            "pycolmap_baseline": {
+              "num_runs": 30,
+              "rotation_error_deg": {
+                "median": 0.9668,
+                "iqr": 0.7587,
+                "q25": 0.834,
+                "q75": 1.5927
+              },
+              "translation_direction_error_deg": {
+                "median": 3.2731,
+                "iqr": 2.2692,
+                "q25": 2.281,
+                "q75": 4.5502
+              },
+              "reprojection_rmse_px": {
+                "median": 0.3258,
+                "iqr": 0.112,
+                "q25": 0.2807,
+                "q75": 0.3927
+              },
+              "runtime_ms": {
+                "median": 27.8681,
+                "iqr": 25.3717,
+                "q25": 16.3543,
+                "q75": 41.726
+              },
+              "num_inliers": {
+                "median": 443.5,
+                "iqr": 430.0,
+                "q25": 220.0,
+                "q75": 650.0
+              }
+            }
+          }
+        },
+        {
+          "scene": "eth3d_pipes_undistorted_pinhole_10pairs_x_3seeds",
+          "pose_semantics": "eth3d_ground_truth_calibrated_pose",
+          "num_pairs": 10,
+          "pair_names": [
+            "DSC_0634.JPG_vs_DSC_0643.JPG",
+            "DSC_0635.JPG_vs_DSC_0644.JPG",
+            "DSC_0636.JPG_vs_DSC_0645.JPG",
+            "DSC_0634.JPG_vs_DSC_0635.JPG",
+            "DSC_0636.JPG_vs_DSC_0644.JPG",
+            "DSC_0644.JPG_vs_DSC_0645.JPG",
+            "DSC_0635.JPG_vs_DSC_0636.JPG",
+            "DSC_0634.JPG_vs_DSC_0644.JPG",
+            "DSC_0635.JPG_vs_DSC_0643.JPG",
+            "DSC_0635.JPG_vs_DSC_0645.JPG"
+          ],
+          "seeds": [
+            42,
+            101,
+            2026
+          ],
+          "sampson_threshold_px": 1.5,
+          "summary_median_iqr": {
+            "from_scratch_8pt_no_gn": {
+              "num_runs": 30,
+              "rotation_error_deg": {
+                "median": 0.2102,
+                "iqr": 1.2784,
+                "q25": 0.1341,
+                "q75": 1.4125
+              },
+              "translation_direction_error_deg": {
+                "median": 4.9,
+                "iqr": 9.6747,
+                "q25": 2.1188,
+                "q75": 11.7934
+              },
+              "reprojection_rmse_px": {
+                "median": 2.3144,
+                "iqr": 11.8903,
+                "q25": 1.267,
+                "q75": 13.1573
+              },
+              "runtime_ms": {
+                "median": 83.2602,
+                "iqr": 30.0052,
+                "q25": 70.9454,
+                "q75": 100.9506
+              },
+              "num_inliers": {
+                "median": 259.5,
+                "iqr": 288.5,
+                "q25": 162.25,
+                "q75": 450.75
+              }
+            },
+            "from_scratch_8pt_with_gn": {
+              "num_runs": 30,
+              "rotation_error_deg": {
+                "median": 0.2471,
+                "iqr": 0.6551,
+                "q25": 0.0931,
+                "q75": 0.7482
+              },
+              "translation_direction_error_deg": {
+                "median": 0.9043,
+                "iqr": 1.6452,
+                "q25": 0.3496,
+                "q75": 1.9948
+              },
+              "reprojection_rmse_px": {
+                "median": 0.3214,
+                "iqr": 0.1708,
+                "q25": 0.3055,
+                "q75": 0.4763
+              },
+              "runtime_ms": {
+                "median": 104.5999,
+                "iqr": 38.5955,
+                "q25": 78.8409,
+                "q75": 117.4365
+              },
+              "num_inliers": {
+                "median": 259.5,
+                "iqr": 288.5,
+                "q25": 162.25,
+                "q75": 450.75
+              }
+            },
+            "opencv_5pt_baseline": {
+              "num_runs": 30,
+              "rotation_error_deg": {
+                "median": 0.4002,
+                "iqr": 0.6606,
+                "q25": 0.1645,
+                "q75": 0.8251
+              },
+              "translation_direction_error_deg": {
+                "median": 1.1547,
+                "iqr": 0.9536,
+                "q25": 0.4325,
+                "q75": 1.3861
+              },
+              "reprojection_rmse_px": {
+                "median": 0.4012,
+                "iqr": 0.2057,
+                "q25": 0.3025,
+                "q75": 0.5082
+              },
+              "runtime_ms": {
+                "median": 16.193,
+                "iqr": 8.7106,
+                "q25": 12.8407,
+                "q75": 21.5513
+              },
+              "num_inliers": {
+                "median": 247.5,
+                "iqr": 272.0,
+                "q25": 173.0,
+                "q75": 445.0
+              }
+            },
+            "pycolmap_baseline": {
+              "num_runs": 30,
+              "rotation_error_deg": {
+                "median": 0.2672,
+                "iqr": 0.2535,
+                "q25": 0.1163,
+                "q75": 0.3698
+              },
+              "translation_direction_error_deg": {
+                "median": 0.8831,
+                "iqr": 1.0315,
+                "q25": 0.2365,
+                "q75": 1.268
+              },
+              "reprojection_rmse_px": {
+                "median": 0.3434,
+                "iqr": 0.0667,
+                "q25": 0.2988,
+                "q75": 0.3655
+              },
+              "runtime_ms": {
+                "median": 26.5365,
+                "iqr": 9.2558,
+                "q25": 21.4146,
+                "q75": 30.6704
+              },
+              "num_inliers": {
+                "median": 262.0,
+                "iqr": 278.75,
+                "q25": 179.0,
+                "q75": 457.75
+              }
+            }
+          }
+        }
+      ]
+    },
+    "phase_7c5": {
+      "phase": "phase_7c5_validation",
+      "scenes": [
+        {
+          "scene": "fountain_10views",
+          "registered_views": 10,
+          "total_views": 10,
+          "camera_model": "SIMPLE_RADIAL",
+          "fallback_triggered": false,
+          "in_sample_fit_abs_rel_median": 0.0159,
+          "in_sample_inlier_ratio_median": 1.0,
+          "heldout_20pct_abs_rel_median": 0.0158,
+          "heldout_20pct_abs_rel_min_max": [
+            0.0076,
+            0.0749
+          ],
+          "heldout_20pct_inlier_ratio_median": 1.0,
+          "heldout_20pct_inlier_ratio_min_max": [
+            0.7619,
+            1.0
+          ],
+          "sfm_peak_rss_mb": 782.72,
+          "fusion_peak_rss_mb": 875.86,
+          "whole_pipeline_peak_rss_mb": 876.18,
+          "whole_pipeline_peak_above_baseline_mb": 409.0,
+          "sfm_runtime_ms": 12275.3,
+          "fusion_runtime_ms": 13466.28,
+          "whole_pipeline_runtime_ms": 25741.58
+        },
+        {
+          "scene": "eth3d_pipes_14views",
+          "registered_views": 14,
+          "total_views": 14,
+          "camera_model": "OPENCV",
+          "fallback_triggered": true,
+          "in_sample_fit_abs_rel_median": 0.0511,
+          "in_sample_inlier_ratio_median": 0.953,
+          "heldout_20pct_abs_rel_median": 0.0519,
+          "heldout_20pct_abs_rel_min_max": [
+            0.0162,
+            0.1271
+          ],
+          "heldout_20pct_inlier_ratio_median": 0.9524,
+          "heldout_20pct_inlier_ratio_min_max": [
+            0.72,
+            1.0
+          ],
+          "sfm_peak_rss_mb": 1961.25,
+          "fusion_peak_rss_mb": 806.95,
+          "whole_pipeline_peak_rss_mb": 1961.25,
+          "whole_pipeline_peak_above_baseline_mb": 1372.56,
+          "sfm_runtime_ms": 51297.15,
+          "fusion_runtime_ms": 11121.79,
+          "whole_pipeline_runtime_ms": 62418.93
+        }
+      ]
+    },
+    "experiment_d_v2": {
+      "phase": "phase_7e2_experiment_d_v2",
+      "sfm_fountain": {
+        "registered": 33,
+        "total": 33,
+        "pose_eval": {
+          "num_aligned_cameras": 33,
+          "umeyama_scale": 0.16927,
+          "camera_center_ate_rmse": 0.01566,
+          "camera_center_ate_mean": 0.01397,
+          "camera_center_ate_median": 0.0136,
+          "trajectory_collinearity_sv_ratio": 0.54672,
+          "aligned_rotation_error_mean_deg": 1.0125,
+          "aligned_rotation_error_median_deg": 0.8629,
+          "rotation_error_after_best_global_rotation_mean_deg": 0.9056,
+          "pairwise_relative_rotation_error_mean_deg": 1.123,
+          "pairwise_relative_translation_dir_error_mean_deg": 4.8089
+        },
+        "peak_rss_mb": 873.98828125
+      },
+      "sfm_pipes": {
+        "registered": 14,
+        "total": 14,
+        "camera_model": "SIMPLE_RADIAL",
+        "fallback_triggered": false,
+        "pose_eval": {
+          "num_aligned_cameras": 14,
+          "umeyama_scale": 0.20835,
+          "camera_center_ate_rmse": 0.03349,
+          "camera_center_ate_mean": 0.02991,
+          "camera_center_ate_median": 0.02952,
+          "trajectory_collinearity_sv_ratio": 0.54245,
+          "aligned_rotation_error_mean_deg": 1.053,
+          "aligned_rotation_error_median_deg": 1.0107,
+          "rotation_error_after_best_global_rotation_mean_deg": 0.4833,
+          "pairwise_relative_rotation_error_mean_deg": 0.5857,
+          "pairwise_relative_translation_dir_error_mean_deg": 2.0149
+        },
+        "peak_rss_mb": 1930.86328125
+      },
+      "consistency_tuning_fountain_N10": [
+        {
+          "setting": "strict",
+          "consistency_rel_depth_thresh": 0.05,
+          "consistency_rgb_thresh": 0.12,
+          "precision_0.05m": 0.9378,
+          "recall_0.05m": 0.7261,
+          "f_score_0.05m": 0.8185,
+          "truncated_chamfer_0.05m": 0.02168
+        },
+        {
+          "setting": "default",
+          "consistency_rel_depth_thresh": 0.1,
+          "consistency_rgb_thresh": 0.18,
+          "precision_0.05m": 0.9325,
+          "recall_0.05m": 0.7398,
+          "f_score_0.05m": 0.825,
+          "truncated_chamfer_0.05m": 0.02187
+        },
+        {
+          "setting": "relaxed",
+          "consistency_rel_depth_thresh": 0.2,
+          "consistency_rgb_thresh": 0.3,
+          "precision_0.05m": 0.9298,
+          "recall_0.05m": 0.7533,
+          "f_score_0.05m": 0.8323,
+          "truncated_chamfer_0.05m": 0.02174
+        }
+      ],
+      "selected_consistency_config": {
+        "consistency_rel_depth_thresh": 0.2,
+        "consistency_rgb_thresh": 0.3,
+        "min_consistent_views": 2,
+        "sparse_depth_cap_mult": 1.35,
+        "min_tsdf_view_support": 2
+      },
+      "fountain_reference_rgbd_geometry": [
+        {
+          "method": "single_view_oracle_pose_plus_scale",
+          "num_views": 1,
+          "registered_views": 1,
+          "alignment_budget": "GT camera pose + 1 global median scale (oracle)",
+          "runtime_s": 2.8,
+          "bbox_cropped_headline": {
+            "num_recon_pts": 38568,
+            "num_gt_pts": 38568,
+            "truncated_chamfer_0.05m": 0.04499,
+            "raw_chamfer_m_supp": 0.13658,
+            "thresholds": {
+              "0.02m": {
+                "precision": 0.0715,
+                "recall": 0.0683,
+                "f_score": 0.0698
+              },
+              "0.05m": {
+                "precision": 0.2022,
+                "recall": 0.2494,
+                "f_score": 0.2234
+              },
+              "0.10m": {
+                "precision": 0.4024,
+                "recall": 0.4886,
+                "f_score": 0.4413
+              }
+            }
+          },
+          "frustum_restricted_headline": {
+            "num_recon_pts": 15000,
+            "num_gt_pts": 15000,
+            "truncated_chamfer_0.05m": 0.04523,
+            "raw_chamfer_m_supp": 0.13119,
+            "thresholds": {
+              "0.02m": {
+                "precision": 0.0691,
+                "recall": 0.0567,
+                "f_score": 0.0623
+              },
+              "0.05m": {
+                "precision": 0.2035,
+                "recall": 0.2498,
+                "f_score": 0.2243
+              },
+              "0.10m": {
+                "precision": 0.4103,
+                "recall": 0.5115,
+                "f_score": 0.4554
+              }
+            }
+          },
+          "icp_supplementary": {
+            "fitness": 0.8934,
+            "bbox_cropped": {
+              "num_recon_pts": 38568,
+              "num_gt_pts": 38568,
+              "truncated_chamfer_0.05m": 0.02654,
+              "raw_chamfer_m_supp": 0.05872,
+              "thresholds": {
+                "0.02m": {
+                  "precision": 0.6134,
+                  "recall": 0.3452,
+                  "f_score": 0.4418
+                },
+                "0.05m": {
+                  "precision": 0.8332,
+                  "recall": 0.5479,
+                  "f_score": 0.661
+                },
+                "0.10m": {
+                  "precision": 0.8923,
+                  "recall": 0.7216,
+                  "f_score": 0.798
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "single_view_oracle_scale_shift",
+          "num_views": 1,
+          "registered_views": 1,
+          "alignment_budget": "GT camera pose + 2-param scale+shift fit to GT depth (oracle)",
+          "runtime_s": 1.86,
+          "bbox_cropped_headline": {
+            "num_recon_pts": 40000,
+            "num_gt_pts": 40000,
+            "truncated_chamfer_0.05m": 0.02982,
+            "raw_chamfer_m_supp": 0.03802,
+            "thresholds": {
+              "0.02m": {
+                "precision": 0.3862,
+                "recall": 0.2637,
+                "f_score": 0.3134
+              },
+              "0.05m": {
+                "precision": 0.8878,
+                "recall": 0.637,
+                "f_score": 0.7418
+              },
+              "0.10m": {
+                "precision": 0.9979,
+                "recall": 0.8793,
+                "f_score": 0.9348
+              }
+            }
+          },
+          "frustum_restricted_headline": {
+            "num_recon_pts": 15000,
+            "num_gt_pts": 15000,
+            "truncated_chamfer_0.05m": 0.0293,
+            "raw_chamfer_m_supp": 0.03416,
+            "thresholds": {
+              "0.02m": {
+                "precision": 0.3656,
+                "recall": 0.2893,
+                "f_score": 0.323
+              },
+              "0.05m": {
+                "precision": 0.8875,
+                "recall": 0.714,
+                "f_score": 0.7914
+              },
+              "0.10m": {
+                "precision": 0.9981,
+                "recall": 0.9431,
+                "f_score": 0.9698
+              }
+            }
+          },
+          "icp_supplementary": {
+            "fitness": 0.9995,
+            "bbox_cropped": {
+              "num_recon_pts": 40000,
+              "num_gt_pts": 40000,
+              "truncated_chamfer_0.05m": 0.01787,
+              "raw_chamfer_m_supp": 0.02456,
+              "thresholds": {
+                "0.02m": {
+                  "precision": 0.8736,
+                  "recall": 0.5726,
+                  "f_score": 0.6918
+                },
+                "0.05m": {
+                  "precision": 0.9714,
+                  "recall": 0.7392,
+                  "f_score": 0.8396
+                },
+                "0.10m": {
+                  "precision": 0.9991,
+                  "recall": 0.8859,
+                  "f_score": 0.9391
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "fountain_N3",
+          "num_views": 3,
+          "registered_views": 3,
+          "alignment_budget": "Sim(3) Umeyama on recovered camera centres vs GT/ref centres (NO ICP)",
+          "fusion_runtime_s": 2.35,
+          "peak_rss_mb": 532.08,
+          "mesh_faces": 39410,
+          "rejected_discontinuity_pct": 2.55,
+          "rejected_consistency_pct": 20.6,
+          "bbox_cropped_headline": {
+            "num_recon_pts": 40000,
+            "num_gt_pts": 40000,
+            "truncated_chamfer_0.05m": 0.02403,
+            "raw_chamfer_m_supp": 0.04003,
+            "thresholds": {
+              "0.02m": {
+                "precision": 0.6483,
+                "recall": 0.3614,
+                "f_score": 0.4641
+              },
+              "0.05m": {
+                "precision": 0.973,
+                "recall": 0.6142,
+                "f_score": 0.753
+              },
+              "0.10m": {
+                "precision": 0.9993,
+                "recall": 0.7647,
+                "f_score": 0.8664
+              }
+            }
+          },
+          "frustum_restricted_headline": {
+            "num_recon_pts": 40000,
+            "num_gt_pts": 40000,
+            "truncated_chamfer_0.05m": 0.02238,
+            "raw_chamfer_m_supp": 0.0315,
+            "thresholds": {
+              "0.02m": {
+                "precision": 0.6528,
+                "recall": 0.4225,
+                "f_score": 0.513
+              },
+              "0.05m": {
+                "precision": 0.9736,
+                "recall": 0.706,
+                "f_score": 0.8185
+              },
+              "0.10m": {
+                "precision": 0.9995,
+                "recall": 0.8512,
+                "f_score": 0.9194
+              }
+            }
+          },
+          "icp_supplementary": {
+            "fitness": 1.0,
+            "bbox_cropped": {
+              "num_recon_pts": 40000,
+              "num_gt_pts": 40000,
+              "truncated_chamfer_0.05m": 0.01869,
+              "raw_chamfer_m_supp": 0.03383,
+              "thresholds": {
+                "0.02m": {
+                  "precision": 0.9114,
+                  "recall": 0.5025,
+                  "f_score": 0.6478
+                },
+                "0.05m": {
+                  "precision": 0.9737,
+                  "recall": 0.6204,
+                  "f_score": 0.7579
+                },
+                "0.10m": {
+                  "precision": 1.0,
+                  "recall": 0.7817,
+                  "f_score": 0.8775
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "fountain_N5",
+          "num_views": 5,
+          "registered_views": 5,
+          "alignment_budget": "Sim(3) Umeyama on recovered camera centres vs GT/ref centres (NO ICP)",
+          "fusion_runtime_s": 4.29,
+          "peak_rss_mb": 554.2,
+          "mesh_faces": 53432,
+          "rejected_discontinuity_pct": 2.44,
+          "rejected_consistency_pct": 8.01,
+          "bbox_cropped_headline": {
+            "num_recon_pts": 40000,
+            "num_gt_pts": 40000,
+            "truncated_chamfer_0.05m": 0.02079,
+            "raw_chamfer_m_supp": 0.03161,
+            "thresholds": {
+              "0.02m": {
+                "precision": 0.72,
+                "recall": 0.5018,
+                "f_score": 0.5914
+              },
+              "0.05m": {
+                "precision": 0.9559,
+                "recall": 0.7247,
+                "f_score": 0.8244
+              },
+              "0.10m": {
+                "precision": 0.9974,
+                "recall": 0.8458,
+                "f_score": 0.9153
+              }
+            }
+          },
+          "frustum_restricted_headline": {
+            "num_recon_pts": 40000,
+            "num_gt_pts": 40000,
+            "truncated_chamfer_0.05m": 0.01955,
+            "raw_chamfer_m_supp": 0.02654,
+            "thresholds": {
+              "0.02m": {
+                "precision": 0.7496,
+                "recall": 0.5327,
+                "f_score": 0.6228
+              },
+              "0.05m": {
+                "precision": 0.9652,
+                "recall": 0.7523,
+                "f_score": 0.8456
+              },
+              "0.10m": {
+                "precision": 0.9985,
+                "recall": 0.8841,
+                "f_score": 0.9378
+              }
+            }
+          },
+          "icp_supplementary": {
+            "fitness": 0.9999,
+            "bbox_cropped": {
+              "num_recon_pts": 40000,
+              "num_gt_pts": 40000,
+              "truncated_chamfer_0.05m": 0.01716,
+              "raw_chamfer_m_supp": 0.02684,
+              "thresholds": {
+                "0.02m": {
+                  "precision": 0.8678,
+                  "recall": 0.5909,
+                  "f_score": 0.7031
+                },
+                "0.05m": {
+                  "precision": 0.9597,
+                  "recall": 0.7236,
+                  "f_score": 0.8251
+                },
+                "0.10m": {
+                  "precision": 0.9998,
+                  "recall": 0.8579,
+                  "f_score": 0.9234
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "fountain_N10",
+          "num_views": 10,
+          "registered_views": 10,
+          "alignment_budget": "Sim(3) Umeyama on recovered camera centres vs GT/ref centres (NO ICP)",
+          "fusion_runtime_s": 8.7,
+          "peak_rss_mb": 564.42,
+          "mesh_faces": 71564,
+          "rejected_discontinuity_pct": 2.42,
+          "rejected_consistency_pct": 9.14,
+          "bbox_cropped_headline": {
+            "num_recon_pts": 40000,
+            "num_gt_pts": 40000,
+            "truncated_chamfer_0.05m": 0.0218,
+            "raw_chamfer_m_supp": 0.03115,
+            "thresholds": {
+              "0.02m": {
+                "precision": 0.6325,
+                "recall": 0.4996,
+                "f_score": 0.5582
+              },
+              "0.05m": {
+                "precision": 0.9272,
+                "recall": 0.7535,
+                "f_score": 0.8314
+              },
+              "0.10m": {
+                "precision": 0.9964,
+                "recall": 0.8811,
+                "f_score": 0.9352
+              }
+            }
+          },
+          "frustum_restricted_headline": {
+            "num_recon_pts": 40000,
+            "num_gt_pts": 40000,
+            "truncated_chamfer_0.05m": 0.01968,
+            "raw_chamfer_m_supp": 0.02561,
+            "thresholds": {
+              "0.02m": {
+                "precision": 0.7231,
+                "recall": 0.5567,
+                "f_score": 0.6291
+              },
+              "0.05m": {
+                "precision": 0.9475,
+                "recall": 0.7763,
+                "f_score": 0.8534
+              },
+              "0.10m": {
+                "precision": 0.9988,
+                "recall": 0.9146,
+                "f_score": 0.9548
+              }
+            }
+          },
+          "icp_supplementary": {
+            "fitness": 0.9988,
+            "bbox_cropped": {
+              "num_recon_pts": 40000,
+              "num_gt_pts": 40000,
+              "truncated_chamfer_0.05m": 0.01727,
+              "raw_chamfer_m_supp": 0.02539,
+              "thresholds": {
+                "0.02m": {
+                  "precision": 0.8378,
+                  "recall": 0.6303,
+                  "f_score": 0.7194
+                },
+                "0.05m": {
+                  "precision": 0.9486,
+                  "recall": 0.7619,
+                  "f_score": 0.8451
+                },
+                "0.10m": {
+                  "precision": 0.9986,
+                  "recall": 0.8912,
+                  "f_score": 0.9418
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "fountain_N33",
+          "num_views": 33,
+          "registered_views": 33,
+          "alignment_budget": "Sim(3) Umeyama on recovered camera centres vs GT/ref centres (NO ICP)",
+          "fusion_runtime_s": 30.19,
+          "peak_rss_mb": 679.18,
+          "mesh_faces": 313767,
+          "rejected_discontinuity_pct": 3.73,
+          "rejected_consistency_pct": 14.88,
+          "bbox_cropped_headline": {
+            "num_recon_pts": 26158,
+            "num_gt_pts": 26158,
+            "truncated_chamfer_0.05m": 0.02572,
+            "raw_chamfer_m_supp": 0.03222,
+            "thresholds": {
+              "0.02m": {
+                "precision": 0.3803,
+                "recall": 0.5724,
+                "f_score": 0.457
+              },
+              "0.05m": {
+                "precision": 0.6832,
+                "recall": 0.8956,
+                "f_score": 0.7751
+              },
+              "0.10m": {
+                "precision": 0.9274,
+                "recall": 0.9926,
+                "f_score": 0.9589
+              }
+            }
+          },
+          "frustum_restricted_headline": {
+            "num_recon_pts": 20892,
+            "num_gt_pts": 20892,
+            "truncated_chamfer_0.05m": 0.02439,
+            "raw_chamfer_m_supp": 0.03043,
+            "thresholds": {
+              "0.02m": {
+                "precision": 0.4335,
+                "recall": 0.6174,
+                "f_score": 0.5094
+              },
+              "0.05m": {
+                "precision": 0.709,
+                "recall": 0.9011,
+                "f_score": 0.7936
+              },
+              "0.10m": {
+                "precision": 0.9395,
+                "recall": 0.9916,
+                "f_score": 0.9649
+              }
+            }
+          },
+          "icp_supplementary": {
+            "fitness": 0.9675,
+            "bbox_cropped": {
+              "num_recon_pts": 26158,
+              "num_gt_pts": 26158,
+              "truncated_chamfer_0.05m": 0.02621,
+              "raw_chamfer_m_supp": 0.03012,
+              "thresholds": {
+                "0.02m": {
+                  "precision": 0.3625,
+                  "recall": 0.4771,
+                  "f_score": 0.412
+                },
+                "0.05m": {
+                  "precision": 0.7687,
+                  "recall": 0.9,
+                  "f_score": 0.8292
+                },
+                "0.10m": {
+                  "precision": 0.9633,
+                  "recall": 0.9962,
+                  "f_score": 0.9795
+                }
+              }
+            }
+          }
+        }
+      ],
+      "fountain_sparse_cloud": {
+        "num_raw_points": 11688,
+        "num_raw_in_gt_bbox": 8902,
+        "raw_bbox_cropped": {
+          "num_recon_pts": 8902,
+          "num_gt_pts": 8902,
+          "truncated_chamfer_0.05m": 0.01745,
+          "raw_chamfer_m_supp": 0.01892,
+          "thresholds": {
+            "0.02m": {
+              "precision": 0.8553,
+              "recall": 0.6137,
+              "f_score": 0.7146
+            },
+            "0.05m": {
+              "precision": 0.9625,
+              "recall": 0.9017,
+              "f_score": 0.9311
+            },
+            "0.10m": {
+              "precision": 0.9935,
+              "recall": 0.9969,
+              "f_score": 0.9952
+            }
+          }
+        },
+        "num_filtered_points_trk3_err1px": 9757,
+        "num_filtered_in_gt_bbox": 7240,
+        "filtered_bbox_cropped": {
+          "num_recon_pts": 7240,
+          "num_gt_pts": 7240,
+          "truncated_chamfer_0.05m": 0.01866,
+          "raw_chamfer_m_supp": 0.02115,
+          "thresholds": {
+            "0.02m": {
+              "precision": 0.8459,
+              "recall": 0.5644,
+              "f_score": 0.677
+            },
+            "0.05m": {
+              "precision": 0.9675,
+              "recall": 0.8442,
+              "f_score": 0.9017
+            },
+            "0.10m": {
+              "precision": 0.9953,
+              "recall": 0.9836,
+              "f_score": 0.9894
+            }
+          }
+        },
+        "filtered_frustum_restricted": {
+          "num_recon_pts": 6487,
+          "num_gt_pts": 6487,
+          "truncated_chamfer_0.05m": 0.0175,
+          "raw_chamfer_m_supp": 0.01949,
+          "thresholds": {
+            "0.02m": {
+              "precision": 0.8885,
+              "recall": 0.5927,
+              "f_score": 0.7111
+            },
+            "0.05m": {
+              "precision": 0.9887,
+              "recall": 0.8596,
+              "f_score": 0.9196
+            },
+            "0.10m": {
+              "precision": 0.9994,
+              "recall": 0.9835,
+              "f_score": 0.9914
+            }
+          }
+        }
+      },
+      "eth3d_pipes_ground_truth_scan": [
+        {
+          "method": "single_view_oracle_pose_plus_scale",
+          "num_views": 1,
+          "registered_views": 1,
+          "alignment_budget": "GT camera pose + 1 global median scale (oracle)",
+          "runtime_s": 2.12,
+          "bbox_cropped_headline": {
+            "num_recon_pts": 40000,
+            "num_gt_pts": 40000,
+            "truncated_chamfer_0.10m": 0.09502,
+            "raw_chamfer_m_supp": 1.04472,
+            "thresholds": {
+              "0.05m": {
+                "precision": 0.0649,
+                "recall": 0.0277,
+                "f_score": 0.0389
+              },
+              "0.10m": {
+                "precision": 0.1608,
+                "recall": 0.0719,
+                "f_score": 0.0993
+              },
+              "0.20m": {
+                "precision": 0.3331,
+                "recall": 0.1428,
+                "f_score": 0.1999
+              }
+            }
+          },
+          "frustum_restricted_headline": {
+            "num_recon_pts": 15000,
+            "num_gt_pts": 15000,
+            "truncated_chamfer_0.10m": 0.08939,
+            "raw_chamfer_m_supp": 0.289,
+            "thresholds": {
+              "0.05m": {
+                "precision": 0.0731,
+                "recall": 0.1254,
+                "f_score": 0.0924
+              },
+              "0.10m": {
+                "precision": 0.1698,
+                "recall": 0.3378,
+                "f_score": 0.226
+              },
+              "0.20m": {
+                "precision": 0.3339,
+                "recall": 0.6831,
+                "f_score": 0.4486
+              }
+            }
+          },
+          "icp_supplementary": {
+            "fitness": 0.856,
+            "bbox_cropped": {
+              "num_recon_pts": 40000,
+              "num_gt_pts": 40000,
+              "truncated_chamfer_0.10m": 0.07654,
+              "raw_chamfer_m_supp": 0.95633,
+              "thresholds": {
+                "0.05m": {
+                  "precision": 0.4644,
+                  "recall": 0.0645,
+                  "f_score": 0.1133
+                },
+                "0.10m": {
+                  "precision": 0.7363,
+                  "recall": 0.1157,
+                  "f_score": 0.2
+                },
+                "0.20m": {
+                  "precision": 0.8541,
+                  "recall": 0.1728,
+                  "f_score": 0.2874
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "single_view_oracle_scale_shift",
+          "num_views": 1,
+          "registered_views": 1,
+          "alignment_budget": "GT camera pose + 2-param scale+shift fit to GT depth (oracle)",
+          "runtime_s": 2.05,
+          "bbox_cropped_headline": {
+            "num_recon_pts": 40000,
+            "num_gt_pts": 40000,
+            "truncated_chamfer_0.10m": 0.07413,
+            "raw_chamfer_m_supp": 1.03435,
+            "thresholds": {
+              "0.05m": {
+                "precision": 0.4734,
+                "recall": 0.1026,
+                "f_score": 0.1686
+              },
+              "0.10m": {
+                "precision": 0.7863,
+                "recall": 0.1535,
+                "f_score": 0.2569
+              },
+              "0.20m": {
+                "precision": 0.9713,
+                "recall": 0.1862,
+                "f_score": 0.3126
+              }
+            }
+          },
+          "frustum_restricted_headline": {
+            "num_recon_pts": 15000,
+            "num_gt_pts": 15000,
+            "truncated_chamfer_0.10m": 0.05419,
+            "raw_chamfer_m_supp": 0.06644,
+            "thresholds": {
+              "0.05m": {
+                "precision": 0.5044,
+                "recall": 0.5219,
+                "f_score": 0.513
+              },
+              "0.10m": {
+                "precision": 0.7983,
+                "recall": 0.8055,
+                "f_score": 0.8019
+              },
+              "0.20m": {
+                "precision": 0.9773,
+                "recall": 0.9376,
+                "f_score": 0.9571
+              }
+            }
+          },
+          "icp_supplementary": {
+            "fitness": 0.9933,
+            "bbox_cropped": {
+              "num_recon_pts": 40000,
+              "num_gt_pts": 40000,
+              "truncated_chamfer_0.10m": 0.06674,
+              "raw_chamfer_m_supp": 1.02882,
+              "thresholds": {
+                "0.05m": {
+                  "precision": 0.671,
+                  "recall": 0.1409,
+                  "f_score": 0.2328
+                },
+                "0.10m": {
+                  "precision": 0.8719,
+                  "recall": 0.181,
+                  "f_score": 0.2997
+                },
+                "0.20m": {
+                  "precision": 0.9825,
+                  "recall": 0.2079,
+                  "f_score": 0.3431
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "pipes_N3",
+          "num_views": 3,
+          "registered_views": 3,
+          "alignment_budget": "Sim(3) Umeyama on recovered camera centres vs GT/ref centres (NO ICP)",
+          "fusion_runtime_s": 1.72,
+          "peak_rss_mb": 552.3,
+          "mesh_faces": 44672,
+          "rejected_discontinuity_pct": 3.64,
+          "rejected_consistency_pct": 38.05,
+          "bbox_cropped_headline": {
+            "num_recon_pts": 40000,
+            "num_gt_pts": 40000,
+            "truncated_chamfer_0.10m": 0.08994,
+            "raw_chamfer_m_supp": 1.09783,
+            "thresholds": {
+              "0.05m": {
+                "precision": 0.1159,
+                "recall": 0.0254,
+                "f_score": 0.0416
+              },
+              "0.10m": {
+                "precision": 0.5104,
+                "recall": 0.0841,
+                "f_score": 0.1444
+              },
+              "0.20m": {
+                "precision": 0.9787,
+                "recall": 0.1454,
+                "f_score": 0.2531
+              }
+            }
+          },
+          "frustum_restricted_headline": {
+            "num_recon_pts": 18255,
+            "num_gt_pts": 18255,
+            "truncated_chamfer_0.10m": 0.08197,
+            "raw_chamfer_m_supp": 0.13161,
+            "thresholds": {
+              "0.05m": {
+                "precision": 0.141,
+                "recall": 0.1283,
+                "f_score": 0.1344
+              },
+              "0.10m": {
+                "precision": 0.5424,
+                "recall": 0.4427,
+                "f_score": 0.4875
+              },
+              "0.20m": {
+                "precision": 0.9833,
+                "recall": 0.7601,
+                "f_score": 0.8574
+              }
+            }
+          },
+          "icp_supplementary": {
+            "fitness": 0.9968,
+            "bbox_cropped": {
+              "num_recon_pts": 40000,
+              "num_gt_pts": 40000,
+              "truncated_chamfer_0.10m": 0.07131,
+              "raw_chamfer_m_supp": 1.02642,
+              "thresholds": {
+                "0.05m": {
+                  "precision": 0.5587,
+                  "recall": 0.1143,
+                  "f_score": 0.1898
+                },
+                "0.10m": {
+                  "precision": 0.8118,
+                  "recall": 0.1365,
+                  "f_score": 0.2337
+                },
+                "0.20m": {
+                  "precision": 0.9894,
+                  "recall": 0.1597,
+                  "f_score": 0.275
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "pipes_N5",
+          "num_views": 5,
+          "registered_views": 5,
+          "alignment_budget": "Sim(3) Umeyama on recovered camera centres vs GT/ref centres (NO ICP)",
+          "fusion_runtime_s": 3.17,
+          "peak_rss_mb": 565.64,
+          "mesh_faces": 73691,
+          "rejected_discontinuity_pct": 3.72,
+          "rejected_consistency_pct": 17.82,
+          "bbox_cropped_headline": {
+            "num_recon_pts": 40000,
+            "num_gt_pts": 40000,
+            "truncated_chamfer_0.10m": 0.08633,
+            "raw_chamfer_m_supp": 1.02762,
+            "thresholds": {
+              "0.05m": {
+                "precision": 0.1535,
+                "recall": 0.0496,
+                "f_score": 0.0749
+              },
+              "0.10m": {
+                "precision": 0.6136,
+                "recall": 0.1562,
+                "f_score": 0.249
+              },
+              "0.20m": {
+                "precision": 0.9527,
+                "recall": 0.205,
+                "f_score": 0.3374
+              }
+            }
+          },
+          "frustum_restricted_headline": {
+            "num_recon_pts": 18255,
+            "num_gt_pts": 18255,
+            "truncated_chamfer_0.10m": 0.07321,
+            "raw_chamfer_m_supp": 0.08714,
+            "thresholds": {
+              "0.05m": {
+                "precision": 0.183,
+                "recall": 0.2329,
+                "f_score": 0.2049
+              },
+              "0.10m": {
+                "precision": 0.6654,
+                "recall": 0.7695,
+                "f_score": 0.7137
+              },
+              "0.20m": {
+                "precision": 0.9792,
+                "recall": 0.9504,
+                "f_score": 0.9646
+              }
+            }
+          },
+          "icp_supplementary": {
+            "fitness": 0.9871,
+            "bbox_cropped": {
+              "num_recon_pts": 40000,
+              "num_gt_pts": 40000,
+              "truncated_chamfer_0.10m": 0.07171,
+              "raw_chamfer_m_supp": 0.97002,
+              "thresholds": {
+                "0.05m": {
+                  "precision": 0.4972,
+                  "recall": 0.1626,
+                  "f_score": 0.245
+                },
+                "0.10m": {
+                  "precision": 0.7647,
+                  "recall": 0.1958,
+                  "f_score": 0.3117
+                },
+                "0.20m": {
+                  "precision": 0.9747,
+                  "recall": 0.2188,
+                  "f_score": 0.3574
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "pipes_N10",
+          "num_views": 10,
+          "registered_views": 10,
+          "alignment_budget": "Sim(3) Umeyama on recovered camera centres vs GT/ref centres (NO ICP)",
+          "fusion_runtime_s": 6.27,
+          "peak_rss_mb": 633.84,
+          "mesh_faces": 125293,
+          "rejected_discontinuity_pct": 4.22,
+          "rejected_consistency_pct": 41.7,
+          "bbox_cropped_headline": {
+            "num_recon_pts": 40000,
+            "num_gt_pts": 40000,
+            "truncated_chamfer_0.10m": 0.08846,
+            "raw_chamfer_m_supp": 0.81034,
+            "thresholds": {
+              "0.05m": {
+                "precision": 0.1247,
+                "recall": 0.0562,
+                "f_score": 0.0775
+              },
+              "0.10m": {
+                "precision": 0.4574,
+                "recall": 0.1706,
+                "f_score": 0.2485
+              },
+              "0.20m": {
+                "precision": 0.7994,
+                "recall": 0.2453,
+                "f_score": 0.3754
+              }
+            }
+          },
+          "frustum_restricted_headline": {
+            "num_recon_pts": 18255,
+            "num_gt_pts": 18255,
+            "truncated_chamfer_0.10m": 0.07313,
+            "raw_chamfer_m_supp": 0.09113,
+            "thresholds": {
+              "0.05m": {
+                "precision": 0.1903,
+                "recall": 0.2594,
+                "f_score": 0.2196
+              },
+              "0.10m": {
+                "precision": 0.6158,
+                "recall": 0.7716,
+                "f_score": 0.685
+              },
+              "0.20m": {
+                "precision": 0.9452,
+                "recall": 0.948,
+                "f_score": 0.9466
+              }
+            }
+          },
+          "icp_supplementary": {
+            "fitness": 0.854,
+            "bbox_cropped": {
+              "num_recon_pts": 40000,
+              "num_gt_pts": 40000,
+              "truncated_chamfer_0.10m": 0.0777,
+              "raw_chamfer_m_supp": 0.75705,
+              "thresholds": {
+                "0.05m": {
+                  "precision": 0.3304,
+                  "recall": 0.164,
+                  "f_score": 0.2192
+                },
+                "0.10m": {
+                  "precision": 0.6113,
+                  "recall": 0.2263,
+                  "f_score": 0.3303
+                },
+                "0.20m": {
+                  "precision": 0.8405,
+                  "recall": 0.2739,
+                  "f_score": 0.4132
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "pipes_N14",
+          "num_views": 14,
+          "registered_views": 14,
+          "alignment_budget": "Sim(3) Umeyama on recovered camera centres vs GT/ref centres (NO ICP)",
+          "fusion_runtime_s": 10.04,
+          "peak_rss_mb": 828.73,
+          "mesh_faces": 354268,
+          "rejected_discontinuity_pct": 4.37,
+          "rejected_consistency_pct": 37.73,
+          "bbox_cropped_headline": {
+            "num_recon_pts": 40000,
+            "num_gt_pts": 40000,
+            "truncated_chamfer_0.10m": 0.08956,
+            "raw_chamfer_m_supp": 0.4601,
+            "thresholds": {
+              "0.05m": {
+                "precision": 0.0935,
+                "recall": 0.0896,
+                "f_score": 0.0915
+              },
+              "0.10m": {
+                "precision": 0.3165,
+                "recall": 0.2446,
+                "f_score": 0.276
+              },
+              "0.20m": {
+                "precision": 0.7312,
+                "recall": 0.4623,
+                "f_score": 0.5665
+              }
+            }
+          },
+          "frustum_restricted_headline": {
+            "num_recon_pts": 14368,
+            "num_gt_pts": 14368,
+            "truncated_chamfer_0.10m": 0.0731,
+            "raw_chamfer_m_supp": 0.0933,
+            "thresholds": {
+              "0.05m": {
+                "precision": 0.1901,
+                "recall": 0.2848,
+                "f_score": 0.228
+              },
+              "0.10m": {
+                "precision": 0.5881,
+                "recall": 0.7448,
+                "f_score": 0.6573
+              },
+              "0.20m": {
+                "precision": 0.9286,
+                "recall": 0.9366,
+                "f_score": 0.9326
+              }
+            }
+          },
+          "icp_supplementary": {
+            "fitness": 0.8055,
+            "bbox_cropped": {
+              "num_recon_pts": 40000,
+              "num_gt_pts": 40000,
+              "truncated_chamfer_0.10m": 0.07676,
+              "raw_chamfer_m_supp": 0.41471,
+              "thresholds": {
+                "0.05m": {
+                  "precision": 0.2631,
+                  "recall": 0.2405,
+                  "f_score": 0.2513
+                },
+                "0.10m": {
+                  "precision": 0.5495,
+                  "recall": 0.4145,
+                  "f_score": 0.4725
+                },
+                "0.20m": {
+                  "precision": 0.7817,
+                  "recall": 0.5004,
+                  "f_score": 0.6102
+                }
+              }
+            }
+          }
+        }
+      ],
+      "eth3d_pipes_default_thresh_sensitivity": {
+        "method": "pipes_N14_default_thresh_0.10_0.18",
+        "num_views": 14,
+        "registered_views": 14,
+        "alignment_budget": "Sim(3) Umeyama on recovered camera centres vs GT/ref centres (NO ICP)",
+        "fusion_runtime_s": 8.75,
+        "peak_rss_mb": 682.11,
+        "mesh_faces": 140317,
+        "rejected_discontinuity_pct": 4.37,
+        "rejected_consistency_pct": 53.86,
+        "bbox_cropped_headline": {
+          "num_recon_pts": 40000,
+          "num_gt_pts": 40000,
+          "truncated_chamfer_0.10m": 0.08769,
+          "raw_chamfer_m_supp": 0.48987,
+          "thresholds": {
+            "0.05m": {
+              "precision": 0.1279,
+              "recall": 0.0704,
+              "f_score": 0.0908
+            },
+            "0.10m": {
+              "precision": 0.4434,
+              "recall": 0.1972,
+              "f_score": 0.273
+            },
+            "0.20m": {
+              "precision": 0.8115,
+              "recall": 0.3357,
+              "f_score": 0.475
+            }
+          }
+        },
+        "frustum_restricted_headline": {
+          "num_recon_pts": 18255,
+          "num_gt_pts": 18255,
+          "truncated_chamfer_0.10m": 0.07111,
+          "raw_chamfer_m_supp": 0.08785,
+          "thresholds": {
+            "0.05m": {
+              "precision": 0.2013,
+              "recall": 0.2798,
+              "f_score": 0.2341
+            },
+            "0.10m": {
+              "precision": 0.6286,
+              "recall": 0.7873,
+              "f_score": 0.6991
+            },
+            "0.20m": {
+              "precision": 0.9425,
+              "recall": 0.9524,
+              "f_score": 0.9474
+            }
+          }
+        },
+        "icp_supplementary": {
+          "fitness": 0.9064,
+          "bbox_cropped": {
+            "num_recon_pts": 40000,
+            "num_gt_pts": 40000,
+            "truncated_chamfer_0.10m": 0.07658,
+            "raw_chamfer_m_supp": 0.4454,
+            "thresholds": {
+              "0.05m": {
+                "precision": 0.3169,
+                "recall": 0.1847,
+                "f_score": 0.2334
+              },
+              "0.10m": {
+                "precision": 0.6408,
+                "recall": 0.3065,
+                "f_score": 0.4147
+              },
+              "0.20m": {
+                "precision": 0.886,
+                "recall": 0.3813,
+                "f_score": 0.5331
+              }
+            }
+          }
+        }
+      },
+      "eth3d_pipes_alignment_sensitivity_centres_plus_axes": {
+        "method": "pipes_N14_sim3_centres_plus_axes",
+        "num_views": 14,
+        "registered_views": 14,
+        "alignment_budget": "Sim(3) Umeyama on recovered camera centres vs GT/ref centres (NO ICP)",
+        "fusion_runtime_s": 10.3,
+        "peak_rss_mb": 838.61,
+        "mesh_faces": 354268,
+        "rejected_discontinuity_pct": 4.37,
+        "rejected_consistency_pct": 37.73,
+        "bbox_cropped_headline": {
+          "num_recon_pts": 40000,
+          "num_gt_pts": 40000,
+          "truncated_chamfer_0.10m": 0.09088,
+          "raw_chamfer_m_supp": 0.46457,
+          "thresholds": {
+            "0.05m": {
+              "precision": 0.0843,
+              "recall": 0.0775,
+              "f_score": 0.0808
+            },
+            "0.10m": {
+              "precision": 0.2745,
+              "recall": 0.2061,
+              "f_score": 0.2355
+            },
+            "0.20m": {
+              "precision": 0.7326,
+              "recall": 0.4565,
+              "f_score": 0.5625
+            }
+          }
+        },
+        "frustum_restricted_headline": {
+          "num_recon_pts": 13996,
+          "num_gt_pts": 13996,
+          "truncated_chamfer_0.10m": 0.07764,
+          "raw_chamfer_m_supp": 0.10059,
+          "thresholds": {
+            "0.05m": {
+              "precision": 0.1566,
+              "recall": 0.2213,
+              "f_score": 0.1834
+            },
+            "0.10m": {
+              "precision": 0.5196,
+              "recall": 0.6323,
+              "f_score": 0.5704
+            },
+            "0.20m": {
+              "precision": 0.9243,
+              "recall": 0.9314,
+              "f_score": 0.9278
+            }
+          }
+        },
+        "icp_supplementary": {
+          "fitness": 0.7967,
+          "bbox_cropped": {
+            "num_recon_pts": 40000,
+            "num_gt_pts": 40000,
+            "truncated_chamfer_0.10m": 0.07607,
+            "raw_chamfer_m_supp": 0.41504,
+            "thresholds": {
+              "0.05m": {
+                "precision": 0.2703,
+                "recall": 0.252,
+                "f_score": 0.2609
+              },
+              "0.10m": {
+                "precision": 0.5377,
+                "recall": 0.4123,
+                "f_score": 0.4667
+              },
+              "0.20m": {
+                "precision": 0.7715,
+                "recall": 0.4991,
+                "f_score": 0.6061
+              }
+            }
+          }
+        }
+      },
+      "eth3d_pipes_sparse_cloud": {
+        "num_raw_points": 1192,
+        "num_raw_in_gt_bbox": 1155,
+        "raw_bbox_cropped": {
+          "num_recon_pts": 1155,
+          "num_gt_pts": 1155,
+          "truncated_chamfer_0.10m": 0.09878,
+          "raw_chamfer_m_supp": 0.75219,
+          "thresholds": {
+            "0.05m": {
+              "precision": 0.0069,
+              "recall": 0.0061,
+              "f_score": 0.0065
+            },
+            "0.10m": {
+              "precision": 0.0632,
+              "recall": 0.0277,
+              "f_score": 0.0385
+            },
+            "0.20m": {
+              "precision": 0.5584,
+              "recall": 0.1351,
+              "f_score": 0.2175
+            }
+          }
+        },
+        "num_filtered_points_trk3_err1px": 585,
+        "num_filtered_in_gt_bbox": 582,
+        "filtered_bbox_cropped": {
+          "num_recon_pts": 582,
+          "num_gt_pts": 582,
+          "truncated_chamfer_0.10m": 0.09944,
+          "raw_chamfer_m_supp": 0.94875,
+          "thresholds": {
+            "0.05m": {
+              "precision": 0.0086,
+              "recall": 0.0034,
+              "f_score": 0.0049
+            },
+            "0.10m": {
+              "precision": 0.0155,
+              "recall": 0.0052,
+              "f_score": 0.0077
+            },
+            "0.20m": {
+              "precision": 0.2045,
+              "recall": 0.0739,
+              "f_score": 0.1085
+            }
+          }
+        },
+        "filtered_frustum_restricted": {
+          "num_recon_pts": 495,
+          "num_gt_pts": 495,
+          "truncated_chamfer_0.10m": 0.09863,
+          "raw_chamfer_m_supp": 0.28317,
+          "thresholds": {
+            "0.05m": {
+              "precision": 0.0061,
+              "recall": 0.004,
+              "f_score": 0.0048
+            },
+            "0.10m": {
+              "precision": 0.0667,
+              "recall": 0.0505,
+              "f_score": 0.0575
+            },
+            "0.20m": {
+              "precision": 0.8768,
+              "recall": 0.3293,
+              "f_score": 0.4788
+            }
+          }
+        }
+      },
+      "eth3d_per_view_gt_depth": {
+        "num_views": 14,
+        "single_view_median_scale": {
+          "abs_rel": {
+            "median": 0.1688,
+            "iqr": 0.145
+          },
+          "rmse": {
+            "median": 1.0899,
+            "iqr": 0.4021
+          },
+          "delta1": {
+            "median": 0.7951,
+            "iqr": 0.3396
+          }
+        },
+        "single_view_oracle_scale_shift": {
+          "abs_rel": {
+            "median": 0.0736,
+            "iqr": 0.0366
+          },
+          "rmse": {
+            "median": 0.2475,
+            "iqr": 0.2608
+          },
+          "delta1": {
+            "median": 0.9615,
+            "iqr": 0.057
+          }
+        },
+        "multiview_sfm_aligned": {
+          "abs_rel": {
+            "median": 0.0963,
+            "iqr": 0.037
+          },
+          "rmse": {
+            "median": 0.3008,
+            "iqr": 0.2338
+          },
+          "delta1": {
+            "median": 0.9195,
+            "iqr": 0.0879
+          }
+        }
+      },
+      "custom_scene_01": {
+        "status": "not_present_in_workspace",
+        "expected_path": "D:\\HoloGen\\datasets\\custom_scene_01"
+      }
+    }
+  }
+}

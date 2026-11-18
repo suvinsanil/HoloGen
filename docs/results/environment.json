@@ -1,0 +1,27 @@
+{
+  "timestamp_utc": "2026-11-18T16:08:45.310394+00:00",
+  "git_commit": "049f945",
+  "python_version": "3.10.11",
+  "platform": "Windows-10-10.0.26300-SP0",
+  "processor": "Intel64 Family 6 Model 140 Stepping 1, GenuineIntel",
+  "cpu_cores_logical": 8,
+  "total_ram_gb": 7.7,
+  "gpu": {
+    "name": "NVIDIA GeForce MX330",
+    "vram_mb": 2047.9,
+    "cuda_version": "12.1"
+  },
+  "package_versions": {
+    "torch": "2.4.1+cu121",
+    "transformers": "4.46.3",
+    "open3d": "0.19.0",
+    "trimesh": "4.5.3",
+    "opencv-python": "4.10.0.84",
+    "pycolmap": "3.11.1",
+    "fastapi": "0.115.6",
+    "numpy": "1.26.4",
+    "scipy": "1.14.1",
+    "scikit-learn": "not-installed",
+    "psutil": "6.1.0"
+  }
+}
