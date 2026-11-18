@@ -93,3 +93,31 @@ $$\frac{|Z_a - Z_b|}{\min(Z_a, Z_b)} > \tau_{\text{jump}}$$
 1. **Screened Poisson Reconstruction (`octree_depth=8`):** Solves a global indicator function $\nabla \cdot \nabla \chi = \nabla \cdot \mathbf{V}$ over an adaptive octree. Because Poisson enforces a closed watertight surface, applying it to a single-view 2.5D frustum cloud invents a large hallucinated back-side bubble unless vertices with low sampling density $w_i < Q_q(w)$ are trimmed (`density_quantile_trim = 0.08`).
 2. **Ball Pivoting Algorithm (BPA):** Rolls virtual balls of radii $r \in \{1.5, 2.5, 4.0\} \bar{d}_{\text{nn}}$ across the point cloud; preserves exact input points with zero hallucination (`surface_noise_rms = 0.0227`), at the cost of leaving small unbridged interior holes where sampling density fluctuates.
 3. **3D Alpha Shapes:** Extracts the boundary of the $\alpha$-complex of the 3D Delaunay tetrahedrization (with $2 \times 10^{-3} \bar{d}_{\text{nn}}$ general-position perturbation to prevent Qhull coplanar lattice degeneracy).
+
+
+---
+
+## 7. Projective UV Texturing, Frustum Coverage & glTF Export (Phase 5)
+
+### 7.1 Projective Camera UV Mapping
+Every 3D vertex $\mathbf{v}_i = (X_i, Y_i, Z_i)$ of the reconstructed mesh (regardless of whether it was smoothed, hole-repaired, or generated via Poisson/BPA) is projected onto the camera image plane via intrinsics $K$:
+$$
+u_i = f_x \frac{X_i}{Z_i} + c_x, \quad v_i = f_y \frac{Y_i}{Z_i} + c_y
+$$
+and converted to normalized glTF/OpenGL texture coordinates $(s_i, t_i) \in [0, 1]^2$:
+$$
+s_i = \text{clip}\left(\frac{u_i}{W - 1}, 0, 1\right), \quad t_i = \text{clip}\left(1.0 - \frac{v_i}{H - 1}, 0, 1\right)
+$$
+
+### 7.2 Estimated Coverage Definition
+HoloGen computes and reports two distinct, reproducible coverage metrics:
+1. **Frustum Mesh Coverage (`frustum_mesh_coverage_pct`):** All reconstructed mesh triangles are rasterized in 2D image coordinates $(u, v)$ onto an $H \times W$ binary occupancy canvas $\mathcal{M}$. The frustum coverage is defined as:
+   $$\text{Coverage}_{\text{frustum}} = 100 \times \frac{1}{W \cdot H} \sum_{v=0}^{H-1} \sum_{u=0}^{W-1} \mathbb{I}[\mathcal{M}(v, u) > 0]$$
+2. **Cleaned Point Retention (`cleaned_point_retention_pct`):** The percentage of raw back-projected points surviving Statistical Outlier Removal and Normal Grazing-Angle Filtering.
+
+### 7.3 Coordinate Frame Convention for glTF / GLB Export
+OpenCV pinhole back-projection uses $(+X \text{ right}, +Y \text{ down}, +Z \text{ forward})$, whereas glTF 2.0 and Three.js use a right-handed Y-up frame $(+X \text{ right}, +Y \text{ up}, -Z \text{ forward})$. On export to `GLB`, `OBJ`, and `STL`, HoloGen applies the proper rotation $R_X(180^\circ) = \text{diag}(1, -1, -1)$:
+$$
+(X_{\text{gltf}}, Y_{\text{gltf}}, Z_{\text{gltf}}) = (X_{\text{cam}}, -Y_{\text{cam}}, -Z_{\text{cam}})
+$$
+Since $\det(R_X(180^\circ)) = +1$, triangle winding order and outward normal orientation are preserved without inside-out inversion.
