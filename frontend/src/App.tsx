@@ -31,7 +31,7 @@ const VIEW_MODES: { id: ViewMode3D; label: string }[] = [
   { id: 'depth', label: 'Depth 3D' },
   { id: 'point_cloud', label: 'Point Cloud' },
   { id: 'normals', label: 'Normals' },
-  { id: 'uncertainty_proxy', label: 'Uncertainty Proxy' },
+  { id: 'uncertainty_proxy', label: 'Depth-Discontinuity Map' },
 ]
 
 const IMAGE_TABS: { id: ImageOverlayMode; label: string }[] = [
@@ -39,7 +39,7 @@ const IMAGE_TABS: { id: ImageOverlayMode; label: string }[] = [
   { id: 'heatmap', label: 'Depth Heatmap' },
   { id: 'grayscale', label: 'Depth Gray' },
   { id: 'inverted', label: 'Depth Inverted' },
-  { id: 'uncertainty_proxy', label: 'Uncertainty Proxy' },
+  { id: 'uncertainty_proxy', label: 'Depth-Discontinuity Map' },
 ]
 
 const BG_SWATCHES = [
@@ -392,11 +392,11 @@ export function App() {
               />
             </div>
 
-            {/* Uncertainty Proxy Threshold Slider */}
+            {/* Depth-Discontinuity Cutoff Slider */}
             <div>
               <div className="flex justify-between text-xs mb-1">
                 <label htmlFor="param-unc" className="text-slate-300">
-                  Uncertainty Proxy Cutoff
+                  Depth-Discontinuity Cutoff
                 </label>
                 <span className="text-cyan-300 font-mono">
                   {params.uncertainty_threshold.toFixed(2)}
@@ -523,9 +523,8 @@ export function App() {
 
               {imageTab === 'uncertainty_proxy' && (
                 <p className="text-[11px] text-amber-300/90 mt-2 bg-amber-950/40 border border-amber-500/30 rounded px-2.5 py-1.5">
-                  <strong>Uncertainty Proxy Notice:</strong> Computed from spatial log-depth
-                  gradients. Indicates occlusion boundary risk, not a calibrated statistical
-                  probability.
+                  <strong>Depth-Discontinuity Map:</strong> Computed from spatial log-depth
+                  gradients. Highlights 1D occlusion boundaries and flying-pixel risk zones.
                 </p>
               )}
             </div>
@@ -838,7 +837,7 @@ export function App() {
 
                 <div className="bg-slate-950/60 border border-slate-800/80 rounded-lg p-3">
                   <h3 className="text-xs font-semibold text-slate-300 mb-2">
-                    Monocular Uncertainty Proxy Distribution (Mean:{' '}
+                    Depth-Discontinuity Map Distribution (Mean:{' '}
                     {report.uncertainty_proxy?.mean_uncertainty_proxy}, P90:{' '}
                     {report.uncertainty_proxy?.p90_uncertainty_proxy}, P95:{' '}
                     {report.uncertainty_proxy?.p95_uncertainty_proxy})

@@ -55,13 +55,13 @@ $$
 
 ---
 
-## 4. Monocular Uncertainty Proxy
+## 4. Monocular Depth-Discontinuity Map
 
-Monocular depth networks do not output calibrated epistemic or aleatoric probabilities. HoloGen defines and reports an explicit **Uncertainty Proxy** $U(u, v) \in [0, 1]$ composed of:
-1. **Depth-Gradient Discontinuity Proxy:** Normalized Sobel gradient magnitude $\|\nabla Z(u,v)\|_2$, which peaks along occlusion boundaries where flying pixels occur.
-2. **Flip-Consistency Proxy:** Pixelwise discrepancy between original inference $Z(I)$ and horizontally flipped inference $\text{flip}(Z(\text{flip}(I)))$:
-   $$U_{\text{flip}}(u, v) = \frac{|Z(u, v) - Z_{\text{flip}}(u, v)|}{\max(Z(u, v), \epsilon)}$$
-3. **Inter-Model Disagreement Proxy (when multiple models are run):** Pixelwise variance after least-squares scale-shift alignment between models.
+Monocular depth networks do not output calibrated epistemic or aleatoric probabilities, and empirical Spearman validation on our 8-scene RGB-D suite shows that spatial depth gradients correlate only weakly with global absolute error ($\bar{\rho}_{\text{abs}} = +0.1083$, $\bar{\rho}_{\text{rel}} = +0.1580$). Accordingly, HoloGen defines and reports this layer strictly as a **Depth-Discontinuity Map** $D_{\text{disc}}(u, v) \in [0, 1]$:
+1. **Depth-Gradient Discontinuity Component:** Normalized Sobel gradient magnitude of log-depth $\|\nabla \log Z(u,v)\|_2$, which peaks along 1D occlusion boundaries where flying pixels occur.
+2. **Flip-Consistency Component (optional):** Pixelwise discrepancy between original inference $Z(I)$ and horizontally flipped inference $\text{flip}(Z(\text{flip}(I)))$:
+   $$D_{\text{flip}}(u, v) = \frac{|Z(u, v) - Z_{\text{flip}}(u, v)|}{\max(Z(u, v), \epsilon)}$$
+3. **Inter-Model Disagreement Component (when multiple models are run):** Pixelwise deviation after least-squares scale-shift alignment between models.
 
 
 ---
@@ -122,3 +122,23 @@ $$
 (X_{\text{gltf}}, Y_{\text{gltf}}, Z_{\text{gltf}}) = (X_{\text{cam}}, -Y_{\text{cam}}, -Z_{\text{cam}})
 $$
 Since $\det(R_X(180^\circ)) = +1$, triangle winding order and outward normal orientation are preserved without inside-out inversion.
+
+---
+
+## 9. Multi-View Epipolar Geometry & Triangulation (Phase 7a)
+
+### 9.1 Honest Scope: From-Scratch vs. Library Primitives
+To demonstrate first-principles mastery of two-view epipolar geometry while keeping feature detection practical, Phase 7a separates library-based 2D feature detection from pure-NumPy geometric solvers:
+- **Library-backed (`backend/app/vision/features.py`):** 2D keypoint detection and descriptor computation (`cv2.SIFT_create`, `cv2.ORB_create`) and k-NN descriptor distance lookup (`cv2.BFMatcher`), followed by our explicit Lowe ratio test ($\|d_1\| < 0.75 \|d_2\|$) and mutual cross-check filter.
+- **Implemented from scratch in pure NumPy (`backend/app/geometry/two_view.py`, zero OpenCV geometry calls):**
+  1. **Hartley Isotropic 2D Normalization (`normalize_points_2d`):** Translates 2D points to zero centroid $\bar{\mathbf{p}} = \frac{1}{N}\sum_i \mathbf{p}_i$ and scales isotropically by $s = \sqrt{2} / \left(\frac{1}{N}\sum_i \|\mathbf{p}_i - \bar{\mathbf{p}}\|_2\right)$ via similarity matrix $T \in \mathbb{R}^{3\times 3}$.
+  2. **Normalized 8-Point Fundamental Matrix (`eight_point_fundamental_matrix`):** Forms the $N \times 9$ Kronecker design matrix $A$ for $\tilde{\mathbf{x}}_2^\top \tilde{F} \tilde{\mathbf{x}}_1 = 0$, extracts the right singular vector $\mathbf{v}_9$ via SVD, enforces the internal rank-2 constraint $\det(\tilde{F}) = 0$ by setting $\sigma_3 = 0$ in the SVD of $\tilde{F}$, and denormalizes $F = T_2^\top \tilde{F}_{\text{rank2}} T_1$.
+  3. **First-Order Sampson Epipolar Distance (`compute_sampson_distance`):**
+     $$d_{\text{Sampson}}(\mathbf{x}_1, \mathbf{x}_2; F) = \frac{|\mathbf{x}_2^\top F \mathbf{x}_1|}{\sqrt{(F\mathbf{x}_1)_x^2 + (F\mathbf{x}_1)_y^2 + (F^\top\mathbf{x}_2)_x^2 + (F^\top\mathbf{x}_2)_y^2}}$$
+  4. **Adaptive MSAC/RANSAC Loop (`ransac_fundamental_matrix`):** Samples minimal 8-point subsets, evaluates Sampson inliers ($d_{\text{Sampson}} \le \tau$), minimizes the M-estimator Sample Consensus (MSAC, Torr & Zisserman 2000) truncated quadratic cost $\sum_i \min(d_i^2, \tau^2)$ so noisy hypotheses that accidentally graze an outlier near $\tau$ do not beat clean hypotheses, updates the stopping iteration count adaptively for $99.9\%$ confidence, and performs a two-stage trimmed least-squares 8-point refit on the consensus inlier set.
+  5. **Essential Matrix Projection (`essential_from_fundamental`):** Computes $E_{\text{raw}} = K_2^\top F K_1$ and projects onto the normalized Essential manifold via SVD with $\det(U)=\det(V^\top)=+1$:
+     $$E = U \operatorname{diag}(1, 1, 0) V^\top$$
+  6. **Exact 4-Hypothesis Essential Decomposition (`decompose_essential_matrix`):** Decomposes $E$ into the 4 candidate relative poses $(R, \mathbf{t}) \in \text{SO}(3) \times \mathbb{S}^2$ using $R \in \{U W V^\top, U W^\top V^\top\}$ and $\mathbf{t} = \pm \mathbf{u}_3$.
+  7. **Linear Homogeneous DLT Triangulation (`triangulate_points_dlt`):** For each correspondence and camera matrices $P_1 = K_1 [I \mid \mathbf{0}]$, $P_2 = K_2 [R \mid \mathbf{t}]$, constructs the $4 \times 4$ linear system $A \mathbf{X} = \mathbf{0}$ from $\mathbf{x} \times (P \mathbf{X}) = \mathbf{0}$, preconditions rows to unit $\ell_2$ norm, and solves via SVD.
+  8. **Cheirality Disambiguation (`recover_pose_cheirality`):** Triangulates inliers across all 4 $(R, \mathbf{t})$ candidates and selects the unique pose maximizing positive depths in both cameras ($Z_1 > 0 \land Z_2 > 0$).
+- **Comparison Baselines Only:** `cv2.findEssentialMat` + `cv2.recoverPose` (`estimate_two_view_opencv_baseline`) and `pycolmap.estimate_calibrated_two_view_geometry` (`estimate_two_view_pycolmap_baseline`) are used strictly for side-by-side benchmarking against our from-scratch implementation.

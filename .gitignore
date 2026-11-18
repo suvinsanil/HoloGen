@@ -35,6 +35,7 @@ datasets/nyu_v2/
 datasets/kitti/
 datasets/dtu/
 datasets/eth3d/
+datasets/fountain/
 
 # Frontend build & node_modules
 frontend/node_modules/

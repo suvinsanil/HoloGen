@@ -34,9 +34,10 @@ Given predicted depth $Z_i$ (aligned via closed-form least-squares scale-shift f
 > [!IMPORTANT]
 > **Input-Cloud Reference vs. Ground Truth:** In Experiment B (`scripts/run_experiment_b.py`), the reference point set $Q$ is the **cleaned input back-projected point cloud** (derived from monocular depth), **NOT an independent 3D laser-scanned ground-truth mesh**. Consequently, `Completeness (@tau=0.04)`, `Surface Noise RMS`, `Chamfer L2`, and `Hausdorff P95` in Experiment B measure **surface reconstruction fidelity to the input point cloud** (and detect algorithmic artifacts such as Poisson's hallucinated back-side bubble or Alpha Shape's over-carving), rather than true 3D metric accuracy against the physical scene.
 
-- **Explicit $\alpha$ Selection Criterion for 3D Alpha Shapes:** Across the candidate parameter sweep $\alpha \in \{0.06, 0.09, 0.12, 0.18, 0.30\}$, `scripts/run_experiment_b.py` deterministically selects the optimal $\alpha^*$ by **minimizing bidirectional Chamfer L2 distance (`chamfer_l2`) to the reference input point cloud**:
+- **Explicit $\alpha$ Selection Criterion & In-Sample Circularity Caveat for 3D Alpha Shapes:** Across the candidate parameter sweep $\alpha \in \{0.06, 0.09, 0.12, 0.18, 0.30\}$, `scripts/run_experiment_b.py` deterministically selects $\alpha^*$ by minimizing bidirectional Chamfer L2 distance (`chamfer_l2`) to the reference input point cloud:
   $$\alpha^* = \arg\min_{\alpha \in \{0.06, 0.09, 0.12, 0.18, 0.30\}} \text{Chamfer}_{L_2}(\mathcal{M}(\alpha), Q_{\text{ref}})$$
-  Applied consistently in code (`if ev_a.chamfer_l2 < best_alpha_chamfer:`), this criterion uniquely selects **$\alpha^* = 0.12$** (`chamfer_l2 = 0.03461`, compared to `0.03670` at $\alpha = 0.18$ and `0.06120` at $\alpha = 0.09$) for inclusion as `6_alpha_shape_best_a0.12` in Table B.1.
+  Applied consistently in code (`if ev_a.chamfer_l2 < best_alpha_chamfer:`), this selects **$\alpha^* = 0.12$** (`Chamfer L2 = 0.03461`, **Input-Cloud Completeness = `76.11%`**, compared to $\alpha = 0.18$ with `Chamfer L2 = 0.03670`, **Input-Cloud Completeness = `79.42%`**).
+  *Circularity Note:* Selecting $\alpha^*$ on `sample_02` by minimizing `Chamfer L2` and then reporting `Chamfer L2` on that same cloud is in-sample / circular; therefore, both `Chamfer L2` (`0.03461`) and `Input-Cloud Completeness` (`76.11%`)—along with the full 5-value parameter sweep—are reported together so the completeness trade-off against $\alpha = 0.18$ (`79.42%`) is transparent.
 
 ---
 
@@ -49,13 +50,13 @@ HoloGen reports **View-Frustum Coverage (`view_frustum_coverage_pct`)**: the per
 
 ---
 
-## 4. Investigation of Heavy-Tailed Uncertainty Proxy Statistics (`P90 < Mean` on `sample_02`)
+## 4. Investigation of Heavy-Tailed Depth-Discontinuity Map Statistics (`P90 < Mean` on `sample_02`)
 
-On `sample_02_aloe_indoor.jpg` ($640 \times 554 = 354,560$ pixels), the monocular gradient uncertainty proxy under bilateral refinement reported `Mean = 0.0438` and `P90 = 0.0431` (`P90 < Mean`), whereas under `refinement = "none"` it reported `Mean = 0.0444` and `P90 = 0.0446`.
+On `sample_02_aloe_indoor.jpg` ($640 \times 554 = 354,560$ pixels), the monocular **depth-discontinuity map** under bilateral refinement reported `Mean = 0.0438` and `P90 = 0.0431` (`P90 < Mean`), whereas under `refinement = "none"` it reported `Mean = 0.0444` and `P90 = 0.0446`.
 
 ### Measured Pixel Histogram (`sample_02_aloe_indoor.jpg`, $N = 354,560$ pixels)
 
-| Uncertainty Proxy Bin | Count (`bilateral`) | Share (`bilateral`) | Count (`none`) | Share (`none`) | Physical Region in Scene |
+| Depth-Discontinuity Map Bin | Count (`bilateral`) | Share (`bilateral`) | Count (`none`) | Share (`none`) | Physical Region in Scene |
 | :--- | :---: | :---: | :---: | :---: | :--- |
 | $[0.00, 0.01)$ | 253,150 | **71.40%** | 248,984 | **70.22%** | Smooth leaf interiors & flat background wall |
 | $[0.01, 0.02)$ | 38,496 | **10.86%** | 41,010 | **11.57%** | Gentle leaf curvature |
@@ -69,29 +70,32 @@ On `sample_02_aloe_indoor.jpg` ($640 \times 554 = 354,560$ pixels), the monocula
 **Mathematical Explanation:**
 1. **1D Contours Embedded in a 2D Image:** Depth discontinuities occur along 1D object silhouettes (the perimeter of the aloe leaves), which occupy only $\sim 5.7\%$ of the 2D image area, while **91.23%** of pixels lie on smooth 2D surface interiors with values $< 0.05$.
 2. **Why $P_{90} < \text{Mean}$ Occurs:** Because $>91\%$ of pixels lie below $0.05$, the 90th percentile ($P_{90} = 0.04314$) still sits inside the smooth interior mode. Meanwhile, the top **2.58%** of pixels on sharp occlusion cliffs are saturated at $1.0$ (and $P_{95} = 0.1528$), contributing $+0.0258$ to the first moment and pulling the arithmetic mean up to $0.04379 > P_{90}$ (with standard deviation $\sigma = 0.1645 \gg \text{Mean}$).
-3. **Reporting Resolution:** All reports (`UncertaintyProxyResult.to_metadata_dict()`) now include `P50`, `P90`, `P95`, `P99`, and the 7-bin `histogram_pct` breakdown so the heavy-tailed boundary structure is never obscured by a single percentile.
+3. **Reporting Resolution:** All reports include `P50`, `P90`, `P95`, `P99`, and the 7-bin `histogram_pct` breakdown so the heavy-tailed boundary structure is never obscured by a single percentile.
 
 ### 4.1 Empirical Spearman Correlation Validation Against True Depth Error ($n = 8$ RGB-D Scenes)
 
-To test how well the spatial gradient uncertainty proxy $U(u, v) = \text{norm}(\|\nabla \log Z(u, v)\|_2)$ correlates with actual monocular depth errors, `scripts/validate_uncertainty_and_glb_uvs.py` computes the pixelwise **Spearman rank correlation ($\rho$)** between $U(u, v)$ and:
+To test how well the spatial log-depth gradient **depth-discontinuity map** $D_{\text{disc}}(u, v) = \text{norm}(\|\nabla \log Z(u, v)\|_2)$ correlates with actual monocular depth errors, `scripts/validate_uncertainty_and_glb_uvs.py` computes the pixelwise **Spearman rank correlation effect size ($\rho$)** between $D_{\text{disc}}(u, v)$ and:
 1. **True Absolute Depth Error:** $E_{\text{abs}}(u, v) = |\hat{Z}(u, v) - Z_{\text{gt}}(u, v)|$ (in meters, after Experiment A's least-squares disparity scale-shift alignment).
 2. **True Relative Depth Error:** $E_{\text{rel}}(u, v) = |\hat{Z}(u, v) - Z_{\text{gt}}(u, v)| / Z_{\text{gt}}(u, v)$.
 
-| Scene ID | Dataset | Valid Pixels | Mean Abs Error (m) | Mean Proxy $U$ | **Spearman $\rho$ ($U$ vs Abs Error)** | $p$-value (Abs) | **Spearman $\rho$ ($U$ vs Rel Error)** | $p$-value (Rel) |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| `nyu_depth_v2_office` | `NYU_Depth_V2` | 273,147 | 0.5248 | 0.0777 | **+0.1368** | $< 10^{-300}$ | **+0.1520** | $< 10^{-300}$ |
-| `sun_rgbd_bedroom` | `SUN_RGBD` | 242,679 | 0.2220 | 0.2201 | **+0.2882** | $< 10^{-300}$ | **+0.1061** | $< 10^{-300}$ |
-| `tum_rgbd_desk` | `TUM_RGBD` | 235,699 | 0.0852 | 0.0530 | **+0.1209** | $< 10^{-300}$ | **+0.1410** | $< 10^{-300}$ |
-| `redwood_livingroom_00` | `Redwood_Indoor_RGBD` | 262,682 | 0.2081 | 0.1414 | **-0.0278** | $3.32 \times 10^{-46}$ | **+0.1092** | $< 10^{-300}$ |
-| `redwood_livingroom_01` | `Redwood_Indoor_RGBD` | 263,291 | 0.1969 | 0.1282 | **-0.0124** | $2.10 \times 10^{-10}$ | **+0.1242** | $< 10^{-300}$ |
-| `redwood_livingroom_02` | `Redwood_Indoor_RGBD` | 263,643 | 0.1867 | 0.1039 | **+0.0260** | $1.14 \times 10^{-40}$ | **+0.1382** | $< 10^{-300}$ |
-| `redwood_livingroom_03` | `Redwood_Indoor_RGBD` | 264,106 | 0.1881 | 0.1200 | **+0.0700** | $6.38 \times 10^{-284}$ | **+0.1824** | $< 10^{-300}$ |
-| `redwood_livingroom_04` | `Redwood_Indoor_RGBD` | 264,564 | 0.2074 | 0.1564 | **+0.2644** | $< 10^{-300}$ | **+0.3107** | $< 10^{-300}$ |
-| **Mean Across 8 Scenes** | — | 258,726 | 0.2274 | 0.1251 | **+0.1083** | — | **+0.1580** | — |
+> [!NOTE]
+> **Why $p$-values are omitted:** Nearby pixels in a dense $640 \times 480$ depth map ($N \approx 2.6 \times 10^5$) exhibit strong 2D spatial autocorrelation. Because standard Spearman asymptotic $p$-values assume independent and identically distributed (i.i.d.) observations, effective degrees of freedom are orders of magnitude smaller than $N$, rendering raw $p$-values statistically meaningless. Only effect sizes ($\rho$) are reported below.
+
+| Scene ID | Dataset | Valid Pixels | Mean Abs Error (m) | Mean Discontinuity $D_{\text{disc}}$ | **Spearman $\rho$ ($D_{\text{disc}}$ vs Abs Error)** | **Spearman $\rho$ ($D_{\text{disc}}$ vs Rel Error)** |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
+| `nyu_depth_v2_office` | `NYU_Depth_V2` | 273,147 | 0.5248 | 0.0777 | **+0.1368** | **+0.1520** |
+| `sun_rgbd_bedroom` | `SUN_RGBD` | 242,679 | 0.2220 | 0.2201 | **+0.2882** | **+0.1061** |
+| `tum_rgbd_desk` | `TUM_RGBD` | 235,699 | 0.0852 | 0.0530 | **+0.1209** | **+0.1410** |
+| `redwood_livingroom_00` | `Redwood_Indoor_RGBD` | 262,682 | 0.2081 | 0.1414 | **-0.0278** | **+0.1092** |
+| `redwood_livingroom_01` | `Redwood_Indoor_RGBD` | 263,291 | 0.1969 | 0.1282 | **-0.0124** | **+0.1242** |
+| `redwood_livingroom_02` | `Redwood_Indoor_RGBD` | 263,643 | 0.1867 | 0.1039 | **+0.0260** | **+0.1382** |
+| `redwood_livingroom_03` | `Redwood_Indoor_RGBD` | 264,106 | 0.1881 | 0.1200 | **+0.0700** | **+0.1824** |
+| `redwood_livingroom_04` | `Redwood_Indoor_RGBD` | 264,564 | 0.2074 | 0.1564 | **+0.2644** | **+0.3107** |
+| **Mean Across 8 Scenes** | — | 258,726 | 0.2274 | 0.1251 | **+0.1083** | **+0.1580** |
 
 **Honest Scientific Interpretation:**
-- The gradient uncertainty proxy exhibits a **weak-to-moderate positive rank correlation** with relative depth error across all 8 scenes ($\bar{\rho}_{\text{rel}} = +0.1580$, range $[+0.1061, +0.3107]$) and a **weak mean rank correlation** with absolute depth error ($\bar{\rho}_{\text{abs}} = +0.1083$, with two Redwood living-room frames showing slightly negative $\rho_{\text{abs}} \in [-0.0278, -0.0124]$).
-- **Why?** A spatial gradient proxy peaks exclusively on **local 1D occlusion boundaries** (where flying-pixel errors occur), whereas the largest global absolute errors in monocular depth estimation occur on **smooth, low-gradient background walls and ceilings** (where global perspective tilt or far-range scale compression produces $0.2\text{--}0.5\text{ m}$ error despite near-zero spatial gradient). This empirically validates why the map is strictly labeled an **uncalibrated discontinuity uncertainty proxy** rather than a calibrated global error predictor.
+- The depth-discontinuity map exhibits a **weak-to-moderate positive rank correlation** with relative depth error across all 8 scenes ($\bar{\rho}_{\text{rel}} = +0.1580$, range $[+0.1061, +0.3107]$) and a **weak mean rank correlation** with absolute depth error ($\bar{\rho}_{\text{abs}} = +0.1083$, with two Redwood living-room frames showing slightly negative $\rho_{\text{abs}} \in [-0.0278, -0.0124]$).
+- **Why?** A spatial gradient map peaks exclusively on **local 1D occlusion boundaries** (where flying-pixel errors occur), whereas the largest global absolute errors in monocular depth estimation occur on **smooth, low-gradient background walls and ceilings** (where global perspective tilt or far-range scale compression produces $0.2\text{--}0.5\text{ m}$ error despite near-zero spatial gradient). Consequently, HoloGen names and uses this layer strictly as a **depth-discontinuity map** (for flying-pixel masking and boundary inspection) rather than a global uncertainty or confidence measure.
 
 ---
 
@@ -100,4 +104,4 @@ To test how well the spatial gradient uncertainty proxy $U(u, v) = \text{norm}(\
 1. **Single-View Scale Ambiguity:** A single 2D projection cannot uniquely determine absolute metric scale without strong scene priors. Relative models (`Depth Anything V2 Small`, `DPT-Hybrid`) recover ordinal/affine structure only.
 2. **Occluded & Unseen Surfaces:** Single-view back-projection only observes the front visible surface (2.5D frustum shell). Regions behind foreground objects are empty in the point cloud; watertight meshers like Poisson reconstruction will hallucinate smooth bubble surfaces across occluded voids.
 3. **Reflective, Transparent, and Thin Structures:** Mirrors, glass, and fine foliage violate Lambertian assumptions and produce depth bleeding or disconnected point clusters.
-4. **Uncalibrated Uncertainty Proxy:** The monocular uncertainty map is a heuristic proxy (depth gradient + flip consistency), not a calibrated statistical confidence interval.
+4. **Depth-Discontinuity Map Is Not Calibrated Uncertainty:** The spatial log-depth gradient map detects 1D occlusion jumps (`mean Spearman rho = +0.1083` vs. absolute error, `+0.1580` vs. relative error) and does not predict planar bias on smooth surfaces.
