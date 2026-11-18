@@ -1,10 +1,10 @@
-"""Modular monocular depth estimation interface and Depth Anything V2 implementation."""
+"""Modular monocular depth estimation interface, model registry, and pretrained implementations."""
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Type
 
 import numpy as np
 from PIL import Image
@@ -61,6 +61,17 @@ def disparity_to_relative_depth(
     return depth_map, norm_disp
 
 
+def metric_depth_to_disparity_vis(metric_depth: np.ndarray) -> np.ndarray:
+    """Compute normalized [0, 1] inverse-depth visualization map (higher = closer) from metric depth."""
+    depth = np.maximum(np.asarray(metric_depth, dtype=np.float32), 1e-3)
+    inv_d = 1.0 / depth
+    d_min = float(np.percentile(inv_d, 1.0))
+    d_max = float(np.percentile(inv_d, 99.0))
+    if d_max - d_min < 1e-6:
+        return np.full_like(depth, 0.5, dtype=np.float32)
+    return np.clip((inv_d - d_min) / (d_max - d_min), 0.0, 1.0).astype(np.float32)
+
+
 @dataclass
 class DepthPrediction:
     """Structured result from a depth estimation model."""
@@ -96,7 +107,7 @@ class DepthPrediction:
             "is_metric": self.is_metric,
             "scale_semantics": self.scale_semantics,
             "scale_disclaimer": (
-                "Metric depth estimate (meters)."
+                "Metric depth estimate (meters) from indoor-calibrated monocular network."
                 if self.is_metric
                 else "Monocular relative pseudo-depth; absolute metric scale is unknown."
             ),
@@ -135,14 +146,12 @@ class DepthModel(ABC):
     def predict(self, rgb_uint8: np.ndarray) -> DepthPrediction:
         """Run depth inference on an HxWx3 RGB uint8 image array."""
 
+    def unload(self) -> None:
+        """Release model weights and clear GPU cache to conserve VRAM on constrained hardware."""
 
-class DepthAnythingV2SmallModel(DepthModel):
-    """Depth Anything V2 Small (24.8M params, Apache-2.0) relative depth model."""
 
-    model_name = "depth_anything_v2_small"
-    model_id = "depth-anything/Depth-Anything-V2-Small-hf"
-    license = "Apache-2.0"
-    is_metric = False
+class HuggingFaceDepthModelBase(DepthModel):
+    """Shared Hugging Face AutoModelForDepthEstimation wrapper with OOM protection."""
 
     def __init__(
         self,
@@ -192,8 +201,15 @@ class DepthAnythingV2SmallModel(DepthModel):
         except Exception as exc:
             raise DepthEstimationError(f"Failed to load {self.model_id}: {exc}") from exc
 
+    def unload(self) -> None:
+        """Release model references and free GPU VRAM."""
+        self._model = None
+        self._processor = None
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
     def predict(self, rgb_uint8: np.ndarray) -> DepthPrediction:
-        """Predict relative depth map for an HxWx3 RGB uint8 image."""
+        """Predict depth map for an HxWx3 RGB uint8 image."""
         if rgb_uint8.ndim != 3 or rgb_uint8.shape[2] != 3:
             raise DepthEstimationError(f"Expected HxWx3 RGB image, got shape {rgb_uint8.shape}")
         if self._model is None or self._processor is None:
@@ -216,14 +232,15 @@ class DepthAnythingV2SmallModel(DepthModel):
             with torch.no_grad():
                 outputs = self._model(**inputs)
                 predicted_depth = outputs.predicted_depth
-                # Interpolate to exact input resolution (H, W)
+                if predicted_depth.ndim == 2:
+                    predicted_depth = predicted_depth.unsqueeze(0)
                 prediction = F.interpolate(
                     predicted_depth.unsqueeze(1),
                     size=(h, w),
                     mode="bicubic",
                     align_corners=False,
                 ).squeeze(1).squeeze(0)
-                raw_disp = prediction.detach().cpu().numpy().astype(np.float32)
+                raw_pred = prediction.detach().cpu().numpy().astype(np.float32)
         except RuntimeError as exc:
             if "out of memory" in str(exc).lower() and self.device == "cuda":
                 logger.warning("CUDA OOM during inference on %s; retrying on CPU.", self.model_name)
@@ -233,13 +250,16 @@ class DepthAnythingV2SmallModel(DepthModel):
                 inputs = self._processor(images=pil_img, return_tensors="pt")
                 with torch.no_grad():
                     outputs = self._model(**inputs)
+                    predicted_depth = outputs.predicted_depth
+                    if predicted_depth.ndim == 2:
+                        predicted_depth = predicted_depth.unsqueeze(0)
                     prediction = F.interpolate(
-                        outputs.predicted_depth.unsqueeze(1),
+                        predicted_depth.unsqueeze(1),
                         size=(h, w),
                         mode="bicubic",
                         align_corners=False,
                     ).squeeze(1).squeeze(0)
-                    raw_disp = prediction.detach().cpu().numpy().astype(np.float32)
+                    raw_pred = prediction.detach().cpu().numpy().astype(np.float32)
             else:
                 raise DepthEstimationError(f"Inference failed on {self.model_name}: {exc}") from exc
 
@@ -253,23 +273,98 @@ class DepthAnythingV2SmallModel(DepthModel):
         rss_after_mb = process.memory_info().rss / (1024.0 * 1024.0)
         peak_mem_mb = max(vram_peak_mb, rss_after_mb, rss_before_mb)
 
-        depth_map, norm_disp = disparity_to_relative_depth(
-            raw_disp,
-            near_depth=self.near_depth,
-            far_depth=self.far_depth,
-        )
+        if self.is_metric:
+            depth_map = np.clip(raw_pred, 0.05, 80.0).astype(np.float32)
+            norm_disp = metric_depth_to_disparity_vis(depth_map)
+            scale_semantics = "metric_meters"
+        else:
+            depth_map, norm_disp = disparity_to_relative_depth(
+                raw_pred,
+                near_depth=self.near_depth,
+                far_depth=self.far_depth,
+            )
+            scale_semantics = "relative_unknown_scale"
 
         return DepthPrediction(
             depth_map=depth_map,
             disparity_map=norm_disp,
-            raw_prediction=raw_disp,
+            raw_prediction=raw_pred,
             model_name=self.model_name,
             model_id=self.model_id,
             license=self.license,
             device=self.device,
-            is_metric=False,
-            scale_semantics="relative_unknown_scale",
+            is_metric=self.is_metric,
+            scale_semantics=scale_semantics,
             inference_time_ms=elapsed_ms,
             peak_memory_mb=peak_mem_mb,
             vram_allocated_mb=vram_peak_mb,
         )
+
+
+class DepthAnythingV2SmallModel(HuggingFaceDepthModelBase):
+    """Depth Anything V2 Small (24.8M params, Apache-2.0) relative depth model."""
+
+    model_name = "depth_anything_v2_small"
+    model_id = "depth-anything/Depth-Anything-V2-Small-hf"
+    license = "Apache-2.0"
+    is_metric = False
+
+
+class DPTHybridMiDaSModel(HuggingFaceDepthModelBase):
+    """Intel DPT-Hybrid MiDaS (123M params, MIT) relative depth model."""
+
+    model_name = "dpt_hybrid_midas"
+    model_id = "Intel/dpt-hybrid-midas"
+    license = "MIT"
+    is_metric = False
+
+
+class DepthAnythingV2MetricIndoorSmallModel(HuggingFaceDepthModelBase):
+    """Depth Anything V2 Metric Indoor Small (24.8M params, Apache-2.0) metric depth model (meters)."""
+
+    model_name = "depth_anything_v2_metric_indoor_small"
+    model_id = "depth-anything/Depth-Anything-V2-Metric-Indoor-Small-hf"
+    license = "Apache-2.0"
+    is_metric = True
+
+
+DEPTH_MODEL_REGISTRY: Dict[str, Type[HuggingFaceDepthModelBase]] = {
+    DepthAnythingV2SmallModel.model_name: DepthAnythingV2SmallModel,
+    DPTHybridMiDaSModel.model_name: DPTHybridMiDaSModel,
+    DepthAnythingV2MetricIndoorSmallModel.model_name: DepthAnythingV2MetricIndoorSmallModel,
+}
+
+
+def list_available_depth_models() -> List[Dict[str, Any]]:
+    """Return metadata for all registered depth estimation models."""
+    return [
+        {
+            "model_name": cls.model_name,
+            "model_id": cls.model_id,
+            "license": cls.license,
+            "is_metric": cls.is_metric,
+        }
+        for cls in DEPTH_MODEL_REGISTRY.values()
+    ]
+
+
+def create_depth_model(
+    model_name: Optional[str] = None,
+    device: Optional[str] = None,
+    cache_dir: Optional[Path] = None,
+    near_depth: Optional[float] = None,
+    far_depth: Optional[float] = None,
+) -> HuggingFaceDepthModelBase:
+    """Instantiate a registered DepthModel by name."""
+    settings = get_settings()
+    name = (model_name or settings.default_depth_model).strip().lower()
+    if name not in DEPTH_MODEL_REGISTRY:
+        valid = ", ".join(sorted(DEPTH_MODEL_REGISTRY.keys()))
+        raise DepthEstimationError(f"Unknown depth model '{name}'. Available models: {valid}")
+    cls = DEPTH_MODEL_REGISTRY[name]
+    return cls(
+        device=device or settings.resolve_device(),
+        cache_dir=cache_dir or (settings.models_dir / "huggingface"),
+        near_depth=near_depth if near_depth is not None else settings.relative_near_depth,
+        far_depth=far_depth if far_depth is not None else settings.relative_far_depth,
+    )
