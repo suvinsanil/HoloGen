@@ -38,11 +38,30 @@ MAX_UPLOAD_BYTES = 15 * 1024 * 1024  # 15 MB strict upload limit
 MAX_RAW_DIMENSION = 4096  # 4096x4096 max raw pixel dimension guard
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "application/octet-stream"}
+SAFE_PROJECT_ID_RE = re.compile(r"^[a-zA-Z0-9_\-]{1,80}$")
 
 router = APIRouter(prefix="/api")
 
 _db_instance: Optional[DatabaseManager] = None
 _queue_instance: Optional[ReconstructionJobQueue] = None
+
+
+def validate_project_id(project_id: str) -> str:
+    """Validate project_id against path traversal and enforce containment inside outputs_dir."""
+    if not project_id or not SAFE_PROJECT_ID_RE.fullmatch(project_id) or ".." in project_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid project_id format: only alphanumeric, '_', and '-' characters are permitted.",
+        )
+    settings = get_settings()
+    base_dir = settings.outputs_dir.resolve()
+    candidate = (base_dir / project_id).resolve()
+    if not candidate.is_relative_to(base_dir) or candidate == base_dir:
+        raise HTTPException(
+            status_code=400,
+            detail="Path traversal detected in project_id.",
+        )
+    return project_id
 
 
 def get_db() -> DatabaseManager:
@@ -180,10 +199,15 @@ async def upload_image(
         )
 
     settings = get_settings()
-    safe_stem = re.sub(r"[^a-zA-Z0-9_\-]", "_", Path(filename).stem)[:32] or "scene"
+    # Security: Use purely server-generated project_id and filename on disk; never embed user filename in paths
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    short_uid = uuid.uuid4().hex[:6]
-    project_id = f"{safe_stem}_{ts}_{short_uid}"
+    short_uid = uuid.uuid4().hex[:8]
+    project_id = f"proj_{ts}_{short_uid}"
+    validate_project_id(project_id)
+
+    display_name = re.sub(r"[^a-zA-Z0-9_\-\s]", "", (name or Path(filename).stem)).strip()[:48]
+    if not display_name:
+        display_name = project_id
 
     out_dir = settings.outputs_dir / project_id
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -201,7 +225,7 @@ async def upload_image(
     db = get_db()
     rec = db.create_project(
         project_id=project_id,
-        name=name or safe_stem,
+        name=display_name,
         source_image_path=src_path,
         output_dir=out_dir,
         mode=mode if mode in ("single_view", "multi_view") else "single_view",
@@ -216,6 +240,7 @@ def start_reconstruction(
     request: ReconstructRequest,
 ) -> ProjectStatusResponse:
     """Enqueue a project for 3D reconstruction in the concurrency-1 worker queue."""
+    validate_project_id(project_id)
     db = get_db()
     rec = db.get_project(project_id)
     if rec is None:
@@ -235,6 +260,7 @@ def start_reconstruction(
 @router.get("/status/{project_id}", response_model=ProjectStatusResponse)
 def get_project_status(project_id: str) -> ProjectStatusResponse:
     """Fetch live status, progress, and reconstruction report for a project."""
+    validate_project_id(project_id)
     db = get_db()
     rec = db.get_project(project_id)
     if rec is None:
@@ -258,6 +284,7 @@ def get_depth_image(
     ),
 ) -> FileResponse:
     """Return depth visualization, uncertainty proxy map, or preprocessed input PNG."""
+    validate_project_id(project_id)
     db = get_db()
     rec = db.get_project(project_id)
     if rec is None:
@@ -296,6 +323,7 @@ def get_depth_image(
 @router.get("/projects/{project_id}/point-cloud-json")
 def get_viewer_point_cloud_json(project_id: str) -> FileResponse:
     """Return subsampled 3D point cloud JSON (positions, colors, normals, depth, uncertainty)."""
+    validate_project_id(project_id)
     db = get_db()
     rec = db.get_project(project_id)
     if rec is None:
@@ -337,6 +365,7 @@ def get_viewer_point_cloud_json(project_id: str) -> FileResponse:
 @router.get("/export/{project_id}/{format_key}")
 def download_export_asset(project_id: str, format_key: str) -> FileResponse:
     """Download an exported 3D asset or reconstruction report."""
+    validate_project_id(project_id)
     db = get_db()
     rec = db.get_project(project_id)
     if rec is None:

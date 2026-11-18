@@ -71,6 +71,11 @@ npm.cmd run dev
 
 Open `http://localhost:5173` in your browser to upload images, adjust reconstruction parameters, inspect 2D depth/uncertainty layers alongside the interactive 3D viewport (`Mesh`, `Wireframe`, `RGB`, `Depth`, `Point Cloud`, `Normals`, `Uncertainty Proxy`), and download exported assets.
 
+> [!NOTE]
+> **Windows 11 Smart App Control Workaround:** On Windows 11 machines with Smart App Control enabled, unsigned native `.node` / `.exe` binaries inside `node_modules` (specifically `@rollup/rollup-win32-x64-msvc` and `esbuild.exe`) and unsigned `.ps1` / `pip.exe` shims can be blocked by OS policy. To ensure a reproducible build without weakening OS security settings:
+> 1. Always invoke Python tools via the signed interpreter (`.\.venv\Scripts\python.exe -m pip`, `.\.venv\Scripts\python.exe -m pytest`) and Node via `npm.cmd`.
+> 2. `frontend/package.json` pins `overrides` for `rollup` (`npm:@rollup/wasm-node@4.27.3`) and `esbuild` (`npm:esbuild-wasm@0.21.5`) so Vite builds inside the signed Node.js V8 WebAssembly runtime.
+
 ---
 
 ## Repository Structure
