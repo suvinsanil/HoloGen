@@ -111,6 +111,9 @@ class SfmReconstructionResult:
     total_runtime_ms: float
     peak_ram_mb: float
     peak_ram_delta_mb: float = 0.0
+    undistorted: bool = False
+    fallback_triggered: bool = False
+    undistortion_ms: float = 0.0
     stage_timings_ms: Dict[str, float] = field(default_factory=dict)
 
     @property
@@ -124,6 +127,8 @@ class SfmReconstructionResult:
             "unregistered_images": self.unregistered_images,
             "registration_ratio": round(self.registration_ratio, 4),
             "shared_camera_model": self.shared_camera_model,
+            "fallback_triggered": self.fallback_triggered,
+            "undistorted": self.undistorted,
             "single_camera_mode": self.single_camera_mode,
             "sfm_max_image_size": self.sfm_max_image_size,
             "shared_intrinsics": self.shared_intrinsics.to_dict() if self.shared_intrinsics else None,
@@ -133,6 +138,7 @@ class SfmReconstructionResult:
             "feature_extraction_ms": round(self.feature_extraction_ms, 2),
             "feature_matching_ms": round(self.feature_matching_ms, 2),
             "incremental_mapping_ms": round(self.incremental_mapping_ms, 2),
+            "undistortion_ms": round(self.undistortion_ms, 2),
             "total_runtime_ms": round(self.total_runtime_ms, 2),
             "peak_ram_mb": round(self.peak_ram_mb, 2),
             "peak_ram_above_baseline_mb": round(self.peak_ram_delta_mb, 2),
@@ -259,19 +265,95 @@ def _camera_to_holo_intrinsics(cam: Any) -> CameraIntrinsics:
     )
 
 
+def _run_pycolmap_pass(
+    staging_img_dir: Path,
+    pass_dir: Path,
+    sfm_max_image_size: int,
+    camera_model: str,
+    single_camera: bool,
+    max_num_features: int,
+    num_threads: int,
+    sample_ram_cb: Any,
+) -> Tuple[Optional[Any], Path, float, float, float]:
+    """Execute one pycolmap extract -> match -> incremental_mapping pass for a given camera_model."""
+    import pycolmap
+
+    pass_dir.mkdir(parents=True, exist_ok=True)
+    db_path = pass_dir / "database.db"
+    sparse_out_dir = pass_dir / "sparse"
+    sparse_out_dir.mkdir(parents=True, exist_ok=True)
+
+    t_feat0 = time.perf_counter()
+    sift_opts = pycolmap.SiftExtractionOptions()
+    sift_opts.max_image_size = int(sfm_max_image_size)
+    sift_opts.max_num_features = int(max_num_features)
+    sift_opts.num_threads = int(num_threads)
+
+    cam_mode = pycolmap.CameraMode.SINGLE if single_camera else pycolmap.CameraMode.PER_IMAGE
+    pycolmap.extract_features(
+        database_path=str(db_path),
+        image_path=str(staging_img_dir),
+        camera_mode=cam_mode,
+        camera_model=camera_model,
+        sift_options=sift_opts,
+        device=pycolmap.Device.cpu,
+    )
+    feat_ms = (time.perf_counter() - t_feat0) * 1000.0
+    sample_ram_cb()
+
+    t_match0 = time.perf_counter()
+    match_sift_opts = pycolmap.SiftMatchingOptions()
+    match_sift_opts.num_threads = int(num_threads)
+    pycolmap.match_exhaustive(
+        database_path=str(db_path),
+        sift_options=match_sift_opts,
+        device=pycolmap.Device.cpu,
+    )
+    match_ms = (time.perf_counter() - t_match0) * 1000.0
+    sample_ram_cb()
+
+    t_map0 = time.perf_counter()
+    mapper_opts = pycolmap.IncrementalPipelineOptions()
+    mapper_opts.num_threads = int(num_threads)
+    reconstructions = pycolmap.incremental_mapping(
+        database_path=str(db_path),
+        image_path=str(staging_img_dir),
+        output_path=str(sparse_out_dir),
+        options=mapper_opts,
+    )
+    map_ms = (time.perf_counter() - t_map0) * 1000.0
+    sample_ram_cb()
+
+    if not reconstructions:
+        return None, sparse_out_dir, feat_ms, match_ms, map_ms
+    best_id, best_rec = max(reconstructions.items(), key=lambda kv: kv[1].num_reg_images())
+    best_model_dir = sparse_out_dir / str(best_id)
+    if not best_model_dir.exists():
+        best_model_dir.mkdir(parents=True, exist_ok=True)
+        best_rec.write(str(best_model_dir))
+    return best_rec, best_model_dir, feat_ms, match_ms, map_ms
+
+
 def run_incremental_sfm(
     image_paths: List[Path],
     sfm_max_image_size: int = 1600,
     camera_model: str = "SIMPLE_RADIAL",
+    fallback_camera_model: Optional[str] = "OPENCV",
     single_camera: bool = True,
     max_num_features: int = 4096,
     num_threads: int = 4,
+    undistort: bool = True,
+    undistorted_dir: Optional[Path] = None,
     work_dir: Optional[Path] = None,
 ) -> SfmReconstructionResult:
     """Run N-view incremental Structure-from-Motion using `pycolmap` on CPU.
 
-    Enforces `CameraMode.SINGLE` by default so same-camera image sets share a single intrinsics
-    calibration across all views, and logs registered-image count vs. total, runtime, and peak RAM.
+    Policy:
+    - Defaults to `SIMPLE_RADIAL` with `CameraMode.SINGLE`.
+    - If `fallback_camera_model` is set (default `OPENCV`) and not all images register,
+      automatically retries with `fallback_camera_model` and keeps whichever registers more views.
+    - When `undistort=True` (default), runs `pycolmap.undistort_images` so dense-stage inputs
+      and `CameraIntrinsics` use a pure `PINHOLE` model with zero distortion.
     """
     import pycolmap
 
@@ -292,7 +374,6 @@ def run_incremental_sfm(
             peak_ram_bytes = curr
 
     def _sampler_loop() -> None:
-        # Background sampler: catches peaks inside pycolmap's C++ calls (stage-boundary sampling misses them).
         while not _stop_sampler.is_set():
             _sample_ram()
             _stop_sampler.wait(0.02)
@@ -313,66 +394,95 @@ def run_incremental_sfm(
 
     try:
         staging_img_dir = tmp_root / "images"
-        db_path = tmp_root / "database.db"
-        sparse_out_dir = tmp_root / "sparse"
-        sparse_out_dir.mkdir(parents=True, exist_ok=True)
-
         orig_map = _prepare_sfm_staging_images(image_paths, staging_img_dir, sfm_max_image_size)
         _sample_ram()
 
-        # 1. Feature extraction (single shared camera model for same-camera sets)
-        t_feat0 = time.perf_counter()
-        sift_opts = pycolmap.SiftExtractionOptions()
-        sift_opts.max_image_size = int(sfm_max_image_size)
-        sift_opts.max_num_features = int(max_num_features)
-        sift_opts.num_threads = int(num_threads)
-
-        cam_mode = (
-            pycolmap.CameraMode.SINGLE if single_camera else pycolmap.CameraMode.PER_IMAGE
+        # Primary pass
+        model_used = camera_model
+        fallback_triggered = False
+        best_rec, best_model_dir, feat_ms, match_ms, map_ms = _run_pycolmap_pass(
+            staging_img_dir,
+            tmp_root / "pass_primary",
+            sfm_max_image_size,
+            camera_model,
+            single_camera,
+            max_num_features,
+            num_threads,
+            _sample_ram,
         )
-        pycolmap.extract_features(
-            database_path=str(db_path),
-            image_path=str(staging_img_dir),
-            camera_mode=cam_mode,
-            camera_model=camera_model,
-            sift_options=sift_opts,
-            device=pycolmap.Device.cpu,
-        )
-        feat_ms = (time.perf_counter() - t_feat0) * 1000.0
-        _sample_ram()
 
-        # 2. Exhaustive matching
-        t_match0 = time.perf_counter()
-        match_sift_opts = pycolmap.SiftMatchingOptions()
-        match_sift_opts.num_threads = int(num_threads)
-        pycolmap.match_exhaustive(
-            database_path=str(db_path),
-            sift_options=match_sift_opts,
-            device=pycolmap.Device.cpu,
-        )
-        match_ms = (time.perf_counter() - t_match0) * 1000.0
-        _sample_ram()
+        # Automatic fallback to OPENCV if not all images registered
+        num_in = len(image_paths)
+        primary_reg = best_rec.num_reg_images() if best_rec is not None else 0
+        if (
+            fallback_camera_model
+            and fallback_camera_model != camera_model
+            and primary_reg < num_in
+        ):
+            logger.info(
+                "Primary SfM (%s) registered %d/%d views; retrying with fallback model %s",
+                camera_model,
+                primary_reg,
+                num_in,
+                fallback_camera_model,
+            )
+            fb_rec, fb_dir, fb_feat, fb_match, fb_map = _run_pycolmap_pass(
+                staging_img_dir,
+                tmp_root / "pass_fallback",
+                sfm_max_image_size,
+                fallback_camera_model,
+                single_camera,
+                max_num_features,
+                num_threads,
+                _sample_ram,
+            )
+            feat_ms += fb_feat
+            match_ms += fb_match
+            map_ms += fb_map
+            fb_reg = fb_rec.num_reg_images() if fb_rec is not None else 0
+            if fb_rec is not None and (best_rec is None or fb_reg > primary_reg):
+                best_rec = fb_rec
+                best_model_dir = fb_dir
+                model_used = fallback_camera_model
+                fallback_triggered = True
+                logger.info(
+                    "Fallback SfM (%s) improved registration from %d/%d to %d/%d views",
+                    fallback_camera_model,
+                    primary_reg,
+                    num_in,
+                    fb_reg,
+                    num_in,
+                )
 
-        # 3. Incremental mapping (bundle adjustment)
-        t_map0 = time.perf_counter()
-        mapper_opts = pycolmap.IncrementalPipelineOptions()
-        mapper_opts.num_threads = int(num_threads)
-        reconstructions = pycolmap.incremental_mapping(
-            database_path=str(db_path),
-            image_path=str(staging_img_dir),
-            output_path=str(sparse_out_dir),
-            options=mapper_opts,
-        )
-        map_ms = (time.perf_counter() - t_map0) * 1000.0
-        _sample_ram()
-
-        if not reconstructions:
+        if best_rec is None:
             raise GeometryProcessingError(
                 f"pycolmap incremental SfM failed to register a reconstruction from {len(image_paths)} views."
             )
 
-        # Pick the largest connected component reconstruction (most registered images)
-        best_rec = max(reconstructions.values(), key=lambda r: r.num_reg_images())
+        # Optional (default) undistortion pass -> pure PINHOLE images & matching PINHOLE intrinsics
+        undist_ms = 0.0
+        undist_active = False
+        undist_img_dir: Optional[Path] = None
+        if undistort:
+            t_u0 = time.perf_counter()
+            target_undist = Path(undistorted_dir) if undistorted_dir is not None else (tmp_root / "undistorted")
+            if target_undist.exists():
+                shutil.rmtree(target_undist, ignore_errors=True)
+            target_undist.mkdir(parents=True, exist_ok=True)
+            undist_opts = pycolmap.UndistortCameraOptions()
+            undist_opts.max_image_size = int(sfm_max_image_size)
+            pycolmap.undistort_images(
+                output_path=str(target_undist),
+                input_path=str(best_model_dir),
+                image_path=str(staging_img_dir),
+                output_type="COLMAP",
+                undistort_options=undist_opts,
+            )
+            best_rec = pycolmap.Reconstruction(str(target_undist / "sparse"))
+            undist_img_dir = target_undist / "images"
+            undist_active = True
+            undist_ms = (time.perf_counter() - t_u0) * 1000.0
+            _sample_ram()
 
         # Parse shared camera(s)
         shared_intr: Optional[CameraIntrinsics] = None
@@ -434,14 +544,17 @@ def run_incremental_sfm(
                         obs_ids.append(pid)
                         obs_xyz.append(p3d_xyz_lookup[pid])
 
-            orig_path, _ = orig_map.get(img_obj.name, (staging_img_dir / img_obj.name, 1.0))
+            if undist_active and undist_img_dir is not None and (undist_img_dir / img_obj.name).exists():
+                resolved_img_path = undist_img_dir / img_obj.name
+            else:
+                resolved_img_path, _ = orig_map.get(img_obj.name, (staging_img_dir / img_obj.name, 1.0))
             intr_view = cam_intr_by_id.get(int(img_obj.camera_id), shared_intr)
             assert intr_view is not None
 
             registered_poses[img_obj.name] = SfmCameraPose(
                 image_id=int(img_id),
                 image_name=img_obj.name,
-                image_path=orig_path,
+                image_path=resolved_img_path,
                 camera_id=int(img_obj.camera_id),
                 intrinsics=intr_view,
                 R_w2c=R_w2c,
@@ -483,7 +596,7 @@ def run_incremental_sfm(
             num_input_images=num_in,
             num_registered_images=num_reg,
             registration_ratio=reg_ratio,
-            shared_camera_model=camera_model,
+            shared_camera_model=model_used,
             single_camera_mode=single_camera,
             sfm_max_image_size=sfm_max_image_size,
             shared_intrinsics=shared_intr,
@@ -501,10 +614,14 @@ def run_incremental_sfm(
             total_runtime_ms=total_ms,
             peak_ram_mb=peak_ram_mb,
             peak_ram_delta_mb=peak_ram_delta_mb,
+            undistorted=undist_active,
+            fallback_triggered=fallback_triggered,
+            undistortion_ms=undist_ms,
             stage_timings_ms={
                 "feature_extraction_ms": round(feat_ms, 2),
                 "feature_matching_ms": round(match_ms, 2),
                 "incremental_mapping_ms": round(map_ms, 2),
+                "undistortion_ms": round(undist_ms, 2),
                 "total_runtime_ms": round(total_ms, 2),
             },
         )

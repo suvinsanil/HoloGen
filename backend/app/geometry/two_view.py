@@ -254,21 +254,25 @@ def ransac_fundamental_matrix(
                     adaptive = math.log(1.0 - confidence) / math.log(1.0 - prob_all_inliers)
                     target_iters = min(max_iterations, max(80, int(math.ceil(adaptive))))
 
-    # Two-stage trimmed least-squares refit on consensus inliers (rejecting boundary grazers)
+    # Iterative re-fit of F on consensus inliers until inlier mask converges (up to 5 rounds)
     if best_count >= 8:
-        for trim_factor in (1.0, 0.75):
-            dists_curr = compute_sampson_distance(p1, p2, best_F)
-            core_mask = dists_curr <= (thresh * trim_factor)
-            if int(np.sum(core_mask)) < 8:
-                core_mask = best_inliers
-            F_refit = eight_point_fundamental_matrix(p1[core_mask], p2[core_mask])
+        prev_mask = best_inliers.copy()
+        for _ in range(5):
+            F_refit = eight_point_fundamental_matrix(p1[prev_mask], p2[prev_mask])
             refit_dists = compute_sampson_distance(p1, p2, F_refit)
+            refit_inliers = refit_dists <= thresh
+            refit_count = int(np.sum(refit_inliers))
             refit_score = float(np.sum(np.minimum(refit_dists ** 2, thresh ** 2)))
-            if refit_score <= best_score:
+            if refit_count >= 8 and refit_score <= best_score + 1e-12:
                 best_score = refit_score
                 best_F = F_refit
-                best_inliers = refit_dists <= thresh
-                best_count = int(np.sum(best_inliers))
+                best_inliers = refit_inliers
+                best_count = refit_count
+                if np.array_equal(refit_inliers, prev_mask):
+                    break
+                prev_mask = refit_inliers
+            else:
+                break
 
     return best_F, best_inliers, it
 
@@ -436,6 +440,123 @@ def recover_pose_cheirality(
     return best_R, best_t, best_X, best_cheirality
 
 
+def _skew_symmetric(v: np.ndarray) -> np.ndarray:
+    """Return 3x3 skew-symmetric matrix [v]_x."""
+    return np.array(
+        [
+            [0.0, -v[2], v[1]],
+            [v[2], 0.0, -v[0]],
+            [-v[1], v[0], 0.0],
+        ],
+        dtype=np.float64,
+    )
+
+
+def _exp_so3(omega: np.ndarray) -> np.ndarray:
+    """Rodrigues exponential map from so(3) axis-angle vector to SO(3)."""
+    theta = float(np.linalg.norm(omega))
+    if theta < 1e-12:
+        return np.eye(3, dtype=np.float64) + _skew_symmetric(omega)
+    K = _skew_symmetric(omega / theta)
+    return np.eye(3, dtype=np.float64) + math.sin(theta) * K + (1.0 - math.cos(theta)) * (K @ K)
+
+
+def refine_essential_sampson_gn(
+    R_init: np.ndarray,
+    t_init: np.ndarray,
+    pts1_inliers: np.ndarray,
+    pts2_inliers: np.ndarray,
+    K1: np.ndarray,
+    K2: np.ndarray,
+    max_iters: int = 25,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """From-scratch 5-DoF Levenberg-Marquardt / damped Gauss-Newton refinement on SO(3) x S^2.
+
+    Minimizes the sum of squared signed Sampson epipolar distances (in pixels) while keeping
+    E = [t]_x R strictly on the calibrated Essential manifold.
+
+    Returns:
+        (R_refined, t_refined, E_refined, F_refined)
+    """
+    R = R_init.copy()
+    t_norm = float(np.linalg.norm(t_init))
+    t = t_init / t_norm if t_norm > 1e-12 else np.array([1.0, 0.0, 0.0], dtype=np.float64)
+
+    n = pts1_inliers.shape[0]
+    if n < 8:
+        E = _skew_symmetric(t) @ R
+        F = np.linalg.inv(K2).T @ E @ np.linalg.inv(K1)
+        nf = float(np.linalg.norm(F))
+        if nf > 1e-15:
+            F /= nf
+        return R, t, E, F
+
+    K1_inv = np.linalg.inv(K1)
+    K2_inv_T = np.linalg.inv(K2).T
+    ones = np.ones((n, 1), dtype=np.float64)
+    x1 = np.hstack([pts1_inliers, ones])
+    x2 = np.hstack([pts2_inliers, ones])
+
+    def _sampson_residuals(R_c: np.ndarray, t_c: np.ndarray) -> np.ndarray:
+        F_c = K2_inv_T @ (_skew_symmetric(t_c) @ R_c) @ K1_inv
+        Fx1 = (F_c @ x1.T).T
+        Ftx2 = (F_c.T @ x2.T).T
+        alg = np.sum(x2 * Fx1, axis=1)
+        denom = np.sqrt(np.maximum(Fx1[:, 0] ** 2 + Fx1[:, 1] ** 2 + Ftx2[:, 0] ** 2 + Ftx2[:, 1] ** 2, 1e-15))
+        return alg / denom
+
+    lam = 1e-3
+    eps = 1e-6
+    for _ in range(max_iters):
+        _, _, Vt = np.linalg.svd(t.reshape(1, 3))
+        B = Vt[1:].T  # (3, 2) orthonormal tangent basis for t^perp
+
+        r0 = _sampson_residuals(R, t)
+        cost0 = 0.5 * float(np.sum(r0 ** 2))
+
+        J = np.zeros((n, 5), dtype=np.float64)
+        for j in range(3):
+            dw = np.zeros(3, dtype=np.float64)
+            dw[j] = eps
+            J[:, j] = (_sampson_residuals(_exp_so3(dw) @ R, t) - _sampson_residuals(_exp_so3(-dw) @ R, t)) / (2.0 * eps)
+        for j in range(2):
+            dd = np.zeros(2, dtype=np.float64)
+            dd[j] = eps
+            tp = t + B @ dd
+            tp /= np.linalg.norm(tp)
+            tm = t - B @ dd
+            tm /= np.linalg.norm(tm)
+            J[:, 3 + j] = (_sampson_residuals(R, tp) - _sampson_residuals(R, tm)) / (2.0 * eps)
+
+        H = J.T @ J + lam * np.eye(5, dtype=np.float64)
+        g = J.T @ r0
+        try:
+            step = -np.linalg.solve(H, g)
+        except np.linalg.LinAlgError:
+            break
+
+        Rn = _exp_so3(step[:3]) @ R
+        tn = t + B @ step[3:]
+        tn /= np.linalg.norm(tn)
+        rn = _sampson_residuals(Rn, tn)
+        costn = 0.5 * float(np.sum(rn ** 2))
+
+        if costn < cost0:
+            R, t = Rn, tn
+            lam = max(lam * 0.5, 1e-7)
+            if float(np.linalg.norm(step)) < 1e-8 or abs(cost0 - costn) < 1e-10:
+                break
+        else:
+            lam = min(lam * 4.0, 1e6)
+
+    E_ref = _skew_symmetric(t) @ R
+    F_ref = K2_inv_T @ E_ref @ K1_inv
+    nf = float(np.linalg.norm(F_ref))
+    if nf > 1e-15:
+        F_ref /= nf
+    return R, t, E_ref, F_ref
+
+
 def estimate_two_view_geometry_from_scratch(
     pts1: np.ndarray,
     pts2: np.ndarray,
@@ -444,8 +565,9 @@ def estimate_two_view_geometry_from_scratch(
     sampson_threshold_px: float = 1.5,
     max_ransac_iterations: int = 1200,
     seed: int = 42,
+    refine_essential_gn: bool = True,
 ) -> TwoViewGeometryResult:
-    """Full from-scratch two-view geometry pipeline (normalized 8-pt + Sampson RANSAC + E + Cheirality + DLT)."""
+    """Full from-scratch two-view geometry pipeline (normalized 8-pt + Sampson RANSAC + E + Cheirality + optional 5-DoF Sampson GN + DLT)."""
     t0 = time.perf_counter()
     intr2 = intrinsics2 or intrinsics1
     K1 = intrinsics1.K
@@ -466,7 +588,29 @@ def estimate_two_view_geometry_from_scratch(
         K1=K1,
         K2=K2,
         inlier_mask=inliers,
+        max_depth_ratio=1e6,
     )
+
+    if refine_essential_gn and int(np.sum(inliers)) >= 8:
+        R, t, E, F = refine_essential_sampson_gn(
+            R_init=R,
+            t_init=t,
+            pts1_inliers=pts1[inliers],
+            pts2_inliers=pts2[inliers],
+            K1=K1,
+            K2=K2,
+        )
+        # Re-triangulate inliers with the refined Essential pose
+        P1 = K1 @ np.hstack([np.eye(3, dtype=np.float64), np.zeros((3, 1), dtype=np.float64)])
+        P2 = K2 @ np.hstack([R, t.reshape(3, 1)])
+        X_all = triangulate_points_dlt(pts1, pts2, P1, P2)
+        X_cam2 = (R @ X_all.T).T + t[None, :]
+        cheirality_mask = (
+            inliers
+            & np.all(np.isfinite(X_all), axis=1)
+            & (X_all[:, 2] > 1e-3)
+            & (X_cam2[:, 2] > 1e-3)
+        )
 
     valid_X = X_all[cheirality_mask]
     reproj_err = compute_reprojection_errors(

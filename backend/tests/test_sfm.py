@@ -141,3 +141,53 @@ def test_best_global_rotation_recovers_known_frame_rotation() -> None:
 
     # Hand-computed: perfectly collinear centres -> sigma_2 / sigma_1 = 0
     assert trajectory_sv_ratio(np.array([[0.0, 0, 0], [1.0, 0, 0], [2.0, 0, 0]])) == pytest.approx(0.0, abs=1e-12)
+
+
+def test_undistortion_produces_pinhole_images_and_consistent_backprojection(tmp_path) -> None:
+    """Verify SfM undistortion outputs PINHOLE images & intrinsics and backprojection with undistorted K matches 3D points."""
+    import cv2
+
+    settings = get_settings()
+    views, _ = load_fountain_dataset(settings.datasets_dir)
+    subset = views[:4]
+    undist_dir = tmp_path / "undist"
+
+    sfm_res = run_incremental_sfm(
+        image_paths=[v.image_path for v in subset],
+        sfm_max_image_size=640,
+        camera_model="SIMPLE_RADIAL",
+        single_camera=True,
+        max_num_features=2048,
+        num_threads=4,
+        undistort=True,
+        undistorted_dir=undist_dir,
+    )
+
+    assert sfm_res.undistorted is True
+    assert sfm_res.shared_intrinsics is not None
+    assert "PINHOLE" in sfm_res.shared_intrinsics.source
+
+    for pose in sfm_res.registered_poses.values():
+        assert "PINHOLE" in pose.intrinsics.source
+        assert pose.image_path.exists()
+        img = cv2.imread(str(pose.image_path))
+        assert img is not None
+        h, w = img.shape[:2]
+        assert w == pose.intrinsics.width
+        assert h == pose.intrinsics.height
+
+        # Back-project observed_uv using undistorted K and camera-frame depth Z, then transform to world
+        pts_cam_gt = (pose.R_w2c @ pose.observed_xyz_w.T).T + pose.t_w2c[None, :]
+        z = pts_cam_gt[:, 2]
+        u = pose.observed_uv[:, 0]
+        v = pose.observed_uv[:, 1]
+        x_cam = (u - pose.intrinsics.cx) * z / pose.intrinsics.fx
+        y_cam = (v - pose.intrinsics.cy) * z / pose.intrinsics.fy
+        pts_cam_bp = np.column_stack([x_cam, y_cam, z])
+        pts_world_bp = (pose.R_w2c.T @ (pts_cam_bp - pose.t_w2c[None, :]).T).T
+
+        # Reprojection residual in pixels should match pycolmap's sparse reprojection error (< 1.5 px mean)
+        uv_reproj, _ = pose.project_world_points(pts_world_bp)
+        np.testing.assert_allclose(uv_reproj, pose.observed_uv, atol=1e-6)
+        mean_3d_diff = float(np.mean(np.linalg.norm(pts_world_bp - pose.observed_xyz_w, axis=1)))
+        assert mean_3d_diff < 0.05

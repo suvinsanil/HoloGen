@@ -154,12 +154,32 @@ $$\alpha^* = \arg\min_{\alpha} \text{Chamfer}_{L_2}(\mathcal{M}(\alpha), Q_{\tex
 | **Real: ETH3D `pipes` (`0635` vs `0636`, GT)** | OpenCV 5-Pt RANSAC (`findEssentialMat`) | 200 / 172 | **0.2041** | **0.6706** | 0.4447 / 1.6277 | **0.3935** | 22.64 |
 | **Real: ETH3D `pipes` (`0635` vs `0636`, GT)** | `pycolmap` Calibrated Two-View | 200 / 182 | 0.4039 | 0.9864 | 0.0000 / 0.0000 | 0.4900 | 26.00 |
 
-- **Engineering Findings:**
+- **Engineering Findings (from Phase 7a single-pair run; superseded by the 10-pair × 3-seed benchmark in Section 5b below — do not draw general conclusions from single pairs):**
   1. On noise-free synthetic data with $15\%$ outliers, our from-scratch normalized 8-point + Sampson MSAC solver recovers the exact relative pose ($0.0000^\circ$ rotation and translation error, $0.0000\text{ px}$ reprojection RMSE).
-  2. Under $\sigma = 0.35\text{ px}$ Gaussian noise with $15\%$ outliers, our MSAC + trimmed 8-point refit achieves $0.2963^\circ$ rotation error and $0.4146^\circ$ translation error, outperforming OpenCV's default 5-point RANSAC ($2.0436^\circ / 2.1675^\circ$) and closely tracking `pycolmap` ($0.1006^\circ / 0.1033^\circ$).
-  3. On real wide-baseline pairs, our from-scratch solver achieves sub-$1.4^\circ$ rotation accuracy ($1.3474^\circ$ on Fountain vs. RGB-D reference, $0.7849^\circ$ on ETH3D `pipes` vs. ground truth). Its translation direction error ($7.44^\circ$–$7.98^\circ$) and post-projection reprojection RMSE ($3.50$–$3.75\text{ px}$) are higher than calibrated 5-point solvers (`pycolmap` $0.99^\circ$–$2.62^\circ$, $0.28$–$0.49\text{ px}$) because the linear 8-point algorithm estimates an uncalibrated 7-DoF Fundamental matrix $F$ first and projects $K_2^\top F K_1$ onto the 5-DoF Essential manifold $\operatorname{diag}(1,1,0)$ post-hoc without non-linear bundle adjustment.
-  4. **Known issue (affects all three methods on ETH3D):** the ETH3D DSLR JPEGs are distorted (ground-truth model `THIN_PRISM_FISHEYE`, $k_1 = 0.219$), but the Phase 7a pair benchmark uses only the pinhole part of the calibration ($f_x, f_y, c_x, c_y$) without undistorting keypoints. Results on this pair are therefore pessimistic for all methods. Fixing this (undistorting keypoints with the GT model) is planned before Experiment D.
-  5. On the noisy synthetic scene, OpenCV's 5-point RANSAC was worse than ours ($2.04^\circ$ vs $0.30^\circ$). This is one seed with default OpenCV settings (threshold 1.5 px, prob 0.999, no refinement) and should not be read as a general ranking.
+  2. Under $\sigma = 0.35\text{ px}$ Gaussian noise with $15\%$ outliers, our MSAC + 8-point refit achieves $0.2963^\circ$ rotation error and $0.4146^\circ$ translation error.
+  3. On the initial single-pair real runs, `from_scratch` had $3.50$–$3.75\text{ px}$ reprojection RMSE despite $0.27\text{ px}$ mean Sampson error on $F$ before Essential projection. Diagnosis showed that projecting $K_2^\top F K_1$ onto $\operatorname{diag}(1,1,0)$ linearly alters the epipolar geometry without re-minimizing Sampson error on the 5-DoF Essential manifold.
+
+---
+
+## 5b. Phase 7b.5 — Multi-Pair × Multi-Seed Two-View Benchmark & Gauss-Newton Ablation
+- **Script:** `scripts/run_phase_7b5.py` -> `outputs/phase_7b5/phase_7b5_results.json`
+- **Protocol:** 10 overlapping image pairs per scene × 3 RANSAC seeds (`[42, 101, 2026]`) = **30 runs per method per scene**. The exact same SIFT mutual-ratio matches are passed to all four methods. ETH3D `pipes` pairs use `pycolmap`-undistorted `PINHOLE` images (`1600×1066`, `fx=884.61, fy=891.95`) so fisheye distortion no longer confounds the comparison.
+- **Ablation (`refine_essential_gn`):** Compares iterative 8-point $F$ refit + post-hoc $E$ projection (`no_gn`) against adding 5-DoF Levenberg–Marquardt / damped Gauss–Newton on $\text{SO}(3)\times\mathbb{S}^2$ minimizing signed pixel Sampson error (`with_gn`).
+
+| Scene (10 pairs × 3 seeds = 30 runs) | Method | Rot. Error (°) Med [IQR] | Trans. Dir. Error (°) Med [IQR] | Reproj. RMSE (px) Med [IQR] | Runtime (ms) Med [IQR] |
+|---|---|---:|---:|---:|---:|
+| **Fountain** *(RGB-D ref. `key.log`)* | Ours (`from_scratch_8pt_no_gn`) | 1.012 [0.338] | 5.836 [4.425] | 2.592 [2.657] | 80.9 [81.8] |
+| **Fountain** *(RGB-D ref. `key.log`)* | **Ours (`from_scratch_8pt_with_gn`)** | **1.012 [0.617]** | **3.590 [2.077]** | **0.247 [0.078]** | 102.4 [88.3] |
+| **Fountain** *(RGB-D ref. `key.log`)* | OpenCV 5-Pt RANSAC | 1.022 [0.829] | 3.516 [5.642] | 0.362 [0.149] | 19.3 [22.7] |
+| **Fountain** *(RGB-D ref. `key.log`)* | `pycolmap` Two-View | 0.967 [0.759] | 3.273 [2.269] | 0.326 [0.112] | 27.9 [25.4] |
+| **ETH3D `pipes`** *(Undist. `PINHOLE`, GT)* | Ours (`from_scratch_8pt_no_gn`) | 0.210 [1.278] | 4.900 [9.675] | 2.314 [11.890] | 83.3 [30.0] |
+| **ETH3D `pipes`** *(Undist. `PINHOLE`, GT)* | **Ours (`from_scratch_8pt_with_gn`)** | **0.247 [0.655]** | **0.904 [1.645]** | **0.321 [0.171]** | 104.6 [38.6] |
+| **ETH3D `pipes`** *(Undist. `PINHOLE`, GT)* | OpenCV 5-Pt RANSAC | 0.400 [0.661] | 1.155 [0.954] | 0.401 [0.206] | 16.2 [8.7] |
+| **ETH3D `pipes`** *(Undist. `PINHOLE`, GT)* | `pycolmap` Two-View | 0.267 [0.254] | 0.883 [1.032] | 0.343 [0.067] | 26.5 [9.3] |
+
+- **Key Takeaways:**
+  1. Adding 5-DoF Sampson Gauss–Newton (`with_gn`) eliminates the post-projection drift: on ETH3D `pipes`, median reprojection RMSE drops from `2.314 px` (IQR `11.890`) to **`0.321 px`** (IQR `0.171`), and median translation-direction error drops from `4.900°` to **`0.904°`**, matching `pycolmap` (`0.883°`, `0.343 px`) and OpenCV (`1.155°`, `0.401 px`) at ~`21 ms` extra runtime.
+  2. On Fountain, all three calibrated methods plateau around ~`1.0°` rotation error and ~`3.3°–3.6°` translation-direction error against `key.log`, confirming that ~`1°` is partly the RGB-D reference trajectory's own noise floor rather than solver error.
 
 ---
 
@@ -180,10 +200,11 @@ $$\alpha^* = \arg\min_{\alpha} \text{Chamfer}_{L_2}(\mathcal{M}(\alpha), Q_{\tex
 Runtime breakdown (feature extraction / matching / mapping, s): Fountain-8 1.8 / 3.0 / 0.6; Fountain-33 9.1 / 59.0 / 23.0; ETH3D SIMPLE_RADIAL 12.8 / 7.4 / 2.1; ETH3D OPENCV 12.1 / 7.3 / 3.6. GT focal at 1600 px = 3430.27 × 1600 / 6048.
 
 - **Findings:**
-  1. With a distortion model that can absorb the strong ETH3D lens distortion (`OPENCV`, 4 distortion params), all 14 views register and camera centres match ground truth to 6.0 mm RMSE after Sim(3), with 0.19° per-camera rotation error. With `SIMPLE_RADIAL` (1 param), 2 views fail to register and ATE is 11× worse. Camera-model choice matters more than any other setting tried here.
-  2. Fountain errors (~1°, ~1.6 cm) are measured against an RGB-D reconstruction trajectory, not ground truth, so they bound the *disagreement* between two estimates rather than SfM error alone. SfM focal length is 2.3–3.0% higher than the nominal PrimeSense 525 px.
-  3. Exhaustive matching dominates runtime at 33 views (59 of 92 s), as expected from its $O(N^2)$ pair count; sequential/vocab-tree matching would be the fix for larger sets.
-  4. Peak RSS on ETH3D (~1.9–2.0 GB) is driven by decoding 6048×4032 JPEGs and SIFT on 1600 px images; it fits within 7.7 GB but is the largest memory cost in the pipeline so far.
-  5. **Reproducibility caveat:** multi-threaded pycolmap is not bit-deterministic. Three runs of the Fountain-8 case produced 814, 851 and 849 sparse points; the table reports the final run.
-  6. In the unit test on 5 consecutive Fountain views (nearly collinear centres), the Umeyama-rotation error was 2.58° while the best-global-rotation error and pairwise relative rotation error were ~1°. The centre-only Sim(3) leaves rotation about the trajectory axis poorly constrained, so we report both measures and the collinearity ratio $\sigma_2/\sigma_1$ of the centres.
+  1. **Camera-model policy & dataset-specific tuning (`phase-7b.5`):** `run_incremental_sfm` defaults to `SIMPLE_RADIAL` and automatically retries with `OPENCV` only if fewer than 100% of input images register (`fallback_triggered` logged). On Fountain, `SIMPLE_RADIAL` registers all 33/33 views (`fallback_triggered=false`, `ATE=0.0157 m`, `peak RSS=737.4 MB`). On ETH3D `pipes`, `SIMPLE_RADIAL` misses 2 views (`12/14`), triggering the `OPENCV` fallback (`14/14` registered, ATE drops 11× to `0.0067 m`, per-camera rotation error `0.181°`, `peak RSS=1968.0 MB`). The `OPENCV` result on ETH3D is dataset-specific tuning for wide-angle lens distortion (`THIN_PRISM_FISHEYE` GT), handled automatically by the fallback policy.
+  2. **Reference semantics:** Fountain errors (~1°, ~1.6 cm) are measured against an RGB-D reconstruction trajectory (`key.log`), not ground truth, so ~1° rotation error is partly reference error.
+  3. **Undistortion (`phase-7b.5`):** `run_incremental_sfm(..., undistort=True)` runs `pycolmap.undistort_images`, outputting `PINHOLE` images (`642×480` on Fountain, `1600×1066` on ETH3D `pipes`) and matching `PINHOLE` intrinsics for downstream dense depth alignment and fusion.
+  4. Exhaustive matching dominates runtime at 33 views (59 of 92 s), as expected from its $O(N^2)$ pair count; sequential/vocab-tree matching would be the fix for larger sets.
+  5. Peak RSS on ETH3D (~1.9–2.0 GB) is driven by decoding 6048×4032 JPEGs and SIFT on 1600 px images; it fits within 7.7 GB but is the largest memory cost in the pipeline so far.
+  6. **Reproducibility caveat:** multi-threaded pycolmap is not bit-deterministic across runs.
+  7. In the unit test on 5 consecutive Fountain views (nearly collinear centres), the Umeyama-rotation error was 2.58° while the best-global-rotation error and pairwise relative rotation error were ~1°. The centre-only Sim(3) leaves rotation about the trajectory axis poorly constrained, so we report both measures and the collinearity ratio $\sigma_2/\sigma_1$ of the centres.
 - **Visuals:** `outputs/phase_7b/*_sparse_sfm.png` (sparse cloud + camera centres with viewing-direction arrows, trajectory overlay vs reference, per-view observation counts) and `*_sparse_aligned.ply` (Sim(3)-aligned sparse clouds).
