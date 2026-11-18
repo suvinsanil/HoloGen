@@ -62,3 +62,18 @@ Monocular depth networks do not output calibrated epistemic or aleatoric probabi
 2. **Flip-Consistency Proxy:** Pixelwise discrepancy between original inference $Z(I)$ and horizontally flipped inference $\text{flip}(Z(\text{flip}(I)))$:
    $$U_{\text{flip}}(u, v) = \frac{|Z(u, v) - Z_{\text{flip}}(u, v)|}{\max(Z(u, v), \epsilon)}$$
 3. **Inter-Model Disagreement Proxy (when multiple models are run):** Pixelwise variance after least-squares scale-shift alignment between models.
+
+
+---
+
+## 5. Point Cloud Cleaning, Normal Orientation & Filtering Parameters (Phase 3)
+
+| Operation | Parameter | Default | Mathematical Role |
+| :--- | :--- | :---: | :--- |
+| **Back-Projection** | `min_depth`, `max_depth`, `stride` | $10^{-4}, 10^4, 1$ | Bounds valid depth frustum $Z \in [z_{\min}, z_{\max}]$ and optional pixel decimation stride. |
+| **Normal Estimation** | `max_nn`, `radius` | $30$, $4.5 \bar{d}_{\text{nn}}$ | Local covariance PCA over hybrid KD-tree sphere; normals oriented toward camera origin $(0,0,0)$ so $\mathbf{n}_i \cdot (-\mathbf{p}_i) > 0$. |
+| **Statistical Outlier Removal (SOR)** | `nb_neighbors`, `std_ratio` | $20$, $2.0$ | Prunes points whose mean $k$-NN distance $\bar{d}_i > \mu_d + \text{std\_ratio} \cdot \sigma_d$. |
+| **Radius Outlier Removal (ROR)** | `nb_points`, `radius` | $12$, $3.5 \bar{d}_{\text{nn}}$ | Prunes isolated points with fewer than `nb_points` inside sphere of radius $r$. |
+| **Voxel Downsampling** | `voxel_size` | $0.035$ | Aggregates points and RGB colors within cubic 3D grid cells of edge length `voxel_size`. |
+| **Normal Grazing-Angle Filter** | `max_grazing_angle_deg` | $80.0^\circ$ | Removes monocular depth-cliff veil points where $\arccos(\mathbf{n}_i \cdot \hat{\mathbf{v}}_i) > \theta_{\max}$. |
+| **Tangent-Plane Smoothing** | `alpha`, `k_neighbors` | $0.35$, $9$ | Damps high-frequency depth jitter along surface normal direction $\mathbf{p}_i \leftarrow \mathbf{p}_i + \alpha ((\bar{\mathbf{p}}_i - \mathbf{p}_i)\cdot \mathbf{n}_i)\mathbf{n}_i$. |
