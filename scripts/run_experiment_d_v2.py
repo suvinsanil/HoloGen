@@ -108,14 +108,29 @@ def _filter_to_camera_frustum(
     return pts_world[ok]
 
 
+def _equal_density_sample(pts: np.ndarray, target_n: int, seed: int = 42) -> np.ndarray:
+    """Subsample or keep `pts` at a uniform target count `target_n` so density does not bias P/R."""
+    if len(pts) <= target_n:
+        return pts
+    rng = np.random.default_rng(seed)
+    return pts[rng.choice(len(pts), size=target_n, replace=False)]
+
+
 def _compute_metrics_v2(
     recon_pts: np.ndarray,
     gt_pts: np.ndarray,
     thresholds: List[float],
     trunc_tau: float,
+    equal_sample_n: Optional[int] = 40000,
 ) -> Dict[str, Any]:
     if len(recon_pts) < 10 or len(gt_pts) < 10:
         return {"error": f"too_few_points (recon={len(recon_pts)}, gt={len(gt_pts)})"}
+
+    if equal_sample_n is not None:
+        n_eq = min(equal_sample_n, len(recon_pts), len(gt_pts))
+        if n_eq >= 100:
+            recon_pts = _equal_density_sample(recon_pts, n_eq, seed=42)
+            gt_pts = _equal_density_sample(gt_pts, n_eq, seed=43)
 
     pcd_r = o3d.geometry.PointCloud()
     pcd_r.points = o3d.utility.Vector3dVector(recon_pts)
@@ -229,7 +244,7 @@ def _subset_sfm_result(sfm_full: SfmReconstructionResult, keep_names: List[str])
     return sub
 
 
-def _eval_single_view_oracle_scale(
+def _eval_single_view_oracle(
     anchor_view: CalibratedView,
     gt_pts_bbox: np.ndarray,
     gt_pts_frustum: np.ndarray,
@@ -238,8 +253,12 @@ def _eval_single_view_oracle_scale(
     trunc_tau: float,
     aabb_margin: float,
     icp_dist: float,
+    fit_shift: bool = False,
 ) -> Dict[str, Any]:
-    """Single-view (N=1) oracle-pose + 1-global-scale baseline (median Z_gt / Z_mono)."""
+    """Single-view (N=1) baseline:
+    - fit_shift=False: GT camera pose + 1 global median scale (oracle-scale).
+    - fit_shift=True:  GT camera pose + 2-param affine inverse-depth scale+shift fit to GT depth.
+    """
     t0 = time.perf_counter()
     rgb_full, intr_full = anchor_view.load_rgb_resized(max_dim=640)
     pred = depth_model.predict(rgb_full)
@@ -254,8 +273,23 @@ def _eval_single_view_oracle_scale(
 
     gt_d = _render_gt_depth_map(gt_pts_bbox, anchor_view.R_w2c, anchor_view.t_w2c, intr_d, h, w)
     valid_gt = gt_d > 0.1
-    scale_global = float(np.median(gt_d[valid_gt]) / max(float(np.median(pred.depth_map[valid_gt])), 1e-6))
-    z_scaled = pred.depth_map.astype(np.float64) * scale_global
+    if fit_shift:
+        d_obs = pred.disparity_map[valid_gt].astype(np.float64)
+        inv_gt = 1.0 / gt_d[valid_gt].astype(np.float64)
+        A = np.column_stack([d_obs, np.ones_like(d_obs)])
+        sol, _, _, _ = np.linalg.lstsq(A, inv_gt, rcond=None)
+        if sol[0] > 1e-6 and float(np.min(sol[0] * pred.disparity_map + sol[1])) > 1e-4:
+            z_scaled = 1.0 / np.maximum(sol[0] * pred.disparity_map.astype(np.float64) + sol[1], 1e-4)
+        else:
+            scale_global = float(np.median(gt_d[valid_gt]) / max(float(np.median(pred.depth_map[valid_gt])), 1e-6))
+            z_scaled = pred.depth_map.astype(np.float64) * scale_global
+        method_name = "single_view_oracle_scale_shift"
+        budget_desc = "GT camera pose + 2-param scale+shift fit to GT depth (oracle)"
+    else:
+        scale_global = float(np.median(gt_d[valid_gt]) / max(float(np.median(pred.depth_map[valid_gt])), 1e-6))
+        z_scaled = pred.depth_map.astype(np.float64) * scale_global
+        method_name = "single_view_oracle_pose_plus_scale"
+        budget_desc = "GT camera pose + 1 global median scale (oracle)"
 
     vs, us = np.mgrid[0:h, 0:w]
     zf = z_scaled.ravel()
@@ -267,17 +301,17 @@ def _eval_single_view_oracle_scale(
     pts_bbox = _crop_to_aabb(pts_world, gt_pts_bbox, margin=aabb_margin)
     pts_frustum = _filter_to_camera_frustum(pts_bbox, anchor_view.R_w2c, anchor_view.t_w2c, anchor_view.intrinsics_full)
 
-    bbox_no_icp = _compute_metrics_v2(pts_bbox, gt_pts_bbox, thresholds, trunc_tau)
-    frust_no_icp = _compute_metrics_v2(pts_frustum, gt_pts_frustum, thresholds, trunc_tau)
+    bbox_no_icp = _compute_metrics_v2(pts_bbox, gt_pts_bbox, thresholds, trunc_tau, equal_sample_n=40000)
+    frust_no_icp = _compute_metrics_v2(pts_frustum, gt_pts_frustum, thresholds, trunc_tau, equal_sample_n=15000)
 
     pts_icp, fitness = _run_rigid_icp_supp(pts_bbox, gt_pts_bbox, icp_dist)
-    bbox_with_icp = _compute_metrics_v2(pts_icp, gt_pts_bbox, thresholds, trunc_tau)
+    bbox_with_icp = _compute_metrics_v2(pts_icp, gt_pts_bbox, thresholds, trunc_tau, equal_sample_n=40000)
 
     return {
-        "method": "single_view_oracle_pose_plus_scale",
+        "method": method_name,
         "num_views": 1,
         "registered_views": 1,
-        "alignment_budget": "GT camera pose + 1 global median scale (oracle)",
+        "alignment_budget": budget_desc,
         "runtime_s": round(time.perf_counter() - t0, 2),
         "bbox_cropped_headline": bbox_no_icp,
         "frustum_restricted_headline": frust_no_icp,
@@ -465,10 +499,12 @@ def _plot_pr_curves(f_rows: List[Dict], p_rows: List[Dict], out_png: Path) -> No
         ax.tick_params(colors="#cbd5e1", labelsize=8)
         for sp in ax.spines.values():
             sp.set_color("#475569")
-        ns = [r["num_views"] for r in rows]
-        precs = [r["bbox_cropped_headline"]["thresholds"][tk]["precision"] for r in rows]
-        recs = [r["bbox_cropped_headline"]["thresholds"][tk]["recall"] for r in rows]
-        f1s = [r["bbox_cropped_headline"]["thresholds"][tk]["f_score"] for r in rows]
+        # Plot N=1 (oracle scale), 3, 5, 10, all (skip duplicate N=1 scale+shift row from x-axis)
+        plot_rows = [r for r in rows if r["method"] != "single_view_oracle_scale_shift"]
+        ns = [r["num_views"] for r in plot_rows]
+        precs = [r["bbox_cropped_headline"]["thresholds"][tk]["precision"] for r in plot_rows]
+        recs = [r["bbox_cropped_headline"]["thresholds"][tk]["recall"] for r in plot_rows]
+        f1s = [r["bbox_cropped_headline"]["thresholds"][tk]["f_score"] for r in plot_rows]
         x = range(len(ns))
         ax.plot(x, precs, "-o", color="#38bdf8", label="Precision (No ICP)")
         ax.plot(x, recs, "-s", color="#facc15", label="Recall (No ICP)")
@@ -556,9 +592,10 @@ def main() -> int:
                 best_cfg = cfg_t
         assert best_cfg is not None
 
-        # 3. Fountain N=1, 3, 5, 10, 33 + Sparse Cloud
-        f_n1 = _eval_single_view_oracle_scale(f_anchor, fountain_gt_pts, f_gt_frust, depth_model, [0.02, 0.05, 0.10], 0.05, 0.10, 0.10)
-        f_rows = [f_n1]
+        # 3. Fountain N=1 (scale-only + scale+shift), 3, 5, 10, 33 + Sparse Cloud
+        f_n1_s = _eval_single_view_oracle(f_anchor, fountain_gt_pts, f_gt_frust, depth_model, [0.02, 0.05, 0.10], 0.05, 0.10, 0.10, fit_shift=False)
+        f_n1_ss = _eval_single_view_oracle(f_anchor, fountain_gt_pts, f_gt_frust, depth_model, [0.02, 0.05, 0.10], 0.05, 0.10, 0.10, fit_shift=True)
+        f_rows = [f_n1_s, f_n1_ss]
         for n in (3, 5, 10, sfm_fountain.num_registered_images):
             f_rows.append(
                 _eval_multiview_subset_v2(
@@ -569,9 +606,10 @@ def main() -> int:
             )
         f_sparse = _eval_sparse_cloud(sfm_fountain, sim3_fountain, f_anchor, fountain_gt_pts, f_gt_frust, [0.02, 0.05, 0.10], 0.05, 0.10)
 
-        # 4. ETH3D 'pipes' Out-of-Sample N=1, 3, 5, 10, 14 + Sparse Cloud
-        p_n1 = _eval_single_view_oracle_scale(p_anchor, pipes_gt_pts, p_gt_frust, depth_model, [0.05, 0.10, 0.20], 0.10, 0.15, 0.20)
-        p_rows = [p_n1]
+        # 4. ETH3D 'pipes' Out-of-Sample N=1 (scale-only + scale+shift), 3, 5, 10, 14 + Sparse Cloud
+        p_n1_s = _eval_single_view_oracle(p_anchor, pipes_gt_pts, p_gt_frust, depth_model, [0.05, 0.10, 0.20], 0.10, 0.15, 0.20, fit_shift=False)
+        p_n1_ss = _eval_single_view_oracle(p_anchor, pipes_gt_pts, p_gt_frust, depth_model, [0.05, 0.10, 0.20], 0.10, 0.15, 0.20, fit_shift=True)
+        p_rows = [p_n1_s, p_n1_ss]
         for n in (3, 5, 10, sfm_pipes.num_registered_images):
             p_rows.append(
                 _eval_multiview_subset_v2(
@@ -580,6 +618,38 @@ def main() -> int:
                     [0.05, 0.10, 0.20], 0.10, 0.15, 0.20,
                 )
             )
+
+        # 4b. ETH3D sensitivity row with DEFAULT thresholds (0.10 / 0.18) on N=14
+        default_cfg = MultiViewFusionConfig(
+            depth_max_dim=640, discontinuity_threshold=0.08,
+            consistency_rel_depth_thresh=0.10, consistency_rgb_thresh=0.18,
+            min_consistent_views=2, sparse_depth_cap_mult=1.35, min_tsdf_view_support=2,
+        )
+        p_n14_default_sens = _eval_multiview_subset_v2(
+            "pipes_N14_default_thresh_0.10_0.18", sfm_pipes, p_subsets[sfm_pipes.num_registered_images],
+            sim3_pipes, p_anchor, pipes_gt_pts, p_gt_frust, depth_model, default_cfg,
+            [0.05, 0.10, 0.20], 0.10, 0.15, 0.20,
+        )
+
+        # 4c. Alignment-sensitivity analysis on ETH3D N=14:
+        # Compare centre-only Sim(3) vs Sim(3) using camera centres + optical-axis points (c + s * fwd)
+        from app.vision.sfm import align_umeyama_sim3
+        reg_p_names = sorted(sfm_pipes.registered_poses.keys())
+        gt_p_map = {v.image_path.name: v for v in pipes_views}
+        c_sfm = np.vstack([sfm_pipes.registered_poses[n].camera_center_w for n in reg_p_names])
+        c_gt = np.vstack([gt_p_map[n].camera_center_world for n in reg_p_names])
+        fwd_sfm = np.vstack([sfm_pipes.registered_poses[n].R_w2c.T @ np.array([0.0, 0.0, 1.0]) for n in reg_p_names])
+        fwd_gt = np.vstack([gt_p_map[n].R_w2c.T @ np.array([0.0, 0.0, 1.0]) for n in reg_p_names])
+        # Optical-axis tip scaled proportionally to initial Umeyama scale
+        aug_sfm = np.vstack([c_sfm, c_sfm + (1.0 / max(sim3_pipes.scale, 1e-4)) * fwd_sfm])
+        aug_gt = np.vstack([c_gt, c_gt + 1.0 * fwd_gt])
+        sim3_pipes_axes = align_umeyama_sim3(aug_sfm, aug_gt, with_scale=True)
+        p_n14_axes = _eval_multiview_subset_v2(
+            "pipes_N14_sim3_centres_plus_axes", sfm_pipes, p_subsets[sfm_pipes.num_registered_images],
+            sim3_pipes_axes, p_anchor, pipes_gt_pts, p_gt_frust, depth_model, best_cfg,
+            [0.05, 0.10, 0.20], 0.10, 0.15, 0.20,
+        )
+
         p_sparse = _eval_sparse_cloud(sfm_pipes, sim3_pipes, p_anchor, pipes_gt_pts, p_gt_frust, [0.05, 0.10, 0.20], 0.10, 0.15)
 
         # 5. ETH3D Per-View GT Depth (3 estimators)
@@ -599,6 +669,8 @@ def main() -> int:
         "fountain_reference_rgbd_geometry": f_rows,
         "fountain_sparse_cloud": f_sparse,
         "eth3d_pipes_ground_truth_scan": p_rows,
+        "eth3d_pipes_default_thresh_sensitivity": p_n14_default_sens,
+        "eth3d_pipes_alignment_sensitivity_centres_plus_axes": p_n14_axes,
         "eth3d_pipes_sparse_cloud": p_sparse,
         "eth3d_per_view_gt_depth": eth3d_depth,
         "custom_scene_01": custom_report,
