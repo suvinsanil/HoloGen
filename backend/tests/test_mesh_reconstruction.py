@@ -132,3 +132,42 @@ def test_hand_computed_chamfer_and_hausdorff_metrics() -> None:
     assert m["precision"] == pytest.approx(0.5, abs=1e-6)
     assert m["recall"] == pytest.approx(0.5, abs=1e-6)
     assert m["fscore"] == pytest.approx(0.5, abs=1e-6)
+
+
+def test_adaptive_diagonal_triangulation_and_depth_span_hole_repair() -> None:
+    """Verify adaptive diagonal selection avoids quad dropout and hole-filling refuses depth steps."""
+    intr = estimate_intrinsics(width=2, height=2, focal_length_px=2.0)
+    rgb = np.full((2, 2, 3), 200, dtype=np.uint8)
+
+    # 1. Spiked corner at (u=0, v=1): z01 = 5.0, while z00=2.0, z10=2.0, z11=2.0.
+    # Fixed diagonal (01, 10) would kill both triangles in the quad.
+    # Adaptive diagonal (00, 11) preserves triangle (p00, p11, p10).
+    spiked_depth = np.array([
+        [2.0, 2.0],
+        [5.0, 2.0],
+    ], dtype=np.float32)
+    mesh_spiked = reconstruct_mesh_depth_grid(spiked_depth, rgb, intr, relative_depth_jump_threshold=0.08)
+    assert mesh_spiked.num_faces == 1
+    assert np.array_equal(mesh_spiked.faces[0], [0, 3, 1])
+
+    # 2. Test hole repair depth-span guard:
+    # A step grid with depth jump from Z=2.0 to Z=6.0.
+    # Hole repair must skip loops bridging depth steps and not create artificial curtain geometry.
+    intr4 = estimate_intrinsics(width=4, height=4, focal_length_px=4.0)
+    rgb4 = np.full((4, 4, 3), 200, dtype=np.uint8)
+    step_grid = np.array([
+        [2.0, 2.0, 6.0, 6.0],
+        [2.0, 2.0, 6.0, 6.0],
+        [2.0, 2.0, 6.0, 6.0],
+        [2.0, 2.0, 6.0, 6.0],
+    ], dtype=np.float32)
+    mesh_step = reconstruct_mesh_depth_grid(step_grid, rgb4, intr4, relative_depth_jump_threshold=0.08)
+
+    mesh_repaired = fill_small_mesh_holes(
+        mesh_step,
+        max_hole_loop_edges=20,
+        max_relative_depth_span=0.15,
+        max_absolute_depth_span=0.40,
+    )
+    # No new faces should be created bridging across the 2.0 -> 6.0 step
+    assert mesh_repaired.num_faces == mesh_step.num_faces

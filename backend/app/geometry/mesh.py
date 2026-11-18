@@ -186,41 +186,79 @@ def reconstruct_mesh_depth_grid(
 
     def _edge_ok(za: np.ndarray, zb: np.ndarray) -> np.ndarray:
         denom = np.maximum(np.minimum(za, zb), 1e-4)
-        return (np.abs(za - zb) / denom) <= thresh
+        rel_diff = np.abs(za - zb) / denom
+        # Depth compensation: on distant surfaces (Z > 1.0), the relative depth gradient
+        # of a flat surface under perspective projection naturally grows with depth Z.
+        # Allowing moderate depth compensation prevents tearing distant facades while still
+        # cleanly severing true occlusion boundaries (which have rel_diff >> 0.30).
+        eff_thresh = thresh * (1.0 + 0.05 * np.maximum(0.0, np.minimum(za, zb) - 1.0))
+        return rel_diff <= eff_thresh
 
+    # Perimeter edge validity
     e_horiz_top = _edge_ok(z00, z10)
     e_horiz_bot = _edge_ok(z01, z11)
     e_vert_left = _edge_ok(z00, z01)
     e_vert_right = _edge_ok(z10, z11)
+
+    # Diagonal edges & depth differences:
+    # Diagonal 1: (01, 10)
+    diff_d1 = np.abs(z01 - z10) / np.maximum(np.minimum(z01, z10), 1e-4)
     e_diag_01_10 = _edge_ok(z01, z10)
 
-    # Triangle 1: (p00, p01, p10)
-    valid_t1 = (
-        (idx00 >= 0)
-        & (idx01 >= 0)
-        & (idx10 >= 0)
-        & e_vert_left
-        & e_horiz_top
-        & e_diag_01_10
-    )
-    # Triangle 2: (p10, p01, p11)
-    valid_t2 = (
-        (idx10 >= 0)
-        & (idx01 >= 0)
-        & (idx11 >= 0)
-        & e_diag_01_10
-        & e_horiz_bot
-        & e_vert_right
-    )
+    # Diagonal 2: (00, 11)
+    diff_d2 = np.abs(z00 - z11) / np.maximum(np.minimum(z00, z11), 1e-4)
+    e_diag_00_11 = _edge_ok(z00, z11)
 
-    tris_1 = np.stack([idx00[valid_t1], idx01[valid_t1], idx10[valid_t1]], axis=-1)
-    tris_2 = np.stack([idx10[valid_t2], idx01[valid_t2], idx11[valid_t2]], axis=-1)
+    # Candidate triangles for Diagonal 1:
+    #   T1a: (p00, p01, p10)
+    #   T1b: (p10, p01, p11)
+    can_d1_a = (idx00 >= 0) & (idx01 >= 0) & (idx10 >= 0) & e_vert_left & e_horiz_top & e_diag_01_10
+    can_d1_b = (idx10 >= 0) & (idx01 >= 0) & (idx11 >= 0) & e_diag_01_10 & e_horiz_bot & e_vert_right
 
-    faces = np.vstack([tris_1, tris_2]).astype(np.int32)
-    if faces.shape[0] == 0:
+    # Candidate triangles for Diagonal 2:
+    #   T2a: (p00, p01, p11)
+    #   T2b: (p00, p11, p10)
+    can_d2_a = (idx00 >= 0) & (idx01 >= 0) & (idx11 >= 0) & e_vert_left & e_horiz_bot & e_diag_00_11
+    can_d2_b = (idx00 >= 0) & (idx11 >= 0) & (idx10 >= 0) & e_diag_00_11 & e_vert_right & e_horiz_top
+
+    # Adaptive diagonal selection:
+    # If both diagonals can triangulate the full quad (both triangles valid), pick the diagonal
+    # with the smaller relative depth jump (smoother surface connection).
+    both_d1 = can_d1_a & can_d1_b
+    both_d2 = can_d2_a & can_d2_b
+
+    choose_d1 = both_d1 & (~both_d2 | (diff_d1 <= diff_d2))
+    choose_d2 = both_d2 & (~both_d1 | (diff_d2 < diff_d1))
+
+    # Partial quads: if neither diagonal can form 2 triangles (e.g. at boundary/occlusion edge),
+    # retain valid single triangles without crossing diagonals.
+    neither = ~choose_d1 & ~choose_d2
+    single_d1_a = neither & can_d1_a & (~can_d2_a & ~can_d2_b | (diff_d1 <= diff_d2))
+    single_d1_b = neither & can_d1_b & (~can_d2_a & ~can_d2_b | (diff_d1 <= diff_d2))
+    single_d2_a = neither & can_d2_a & ~single_d1_a & ~single_d1_b
+    single_d2_b = neither & can_d2_b & ~single_d1_a & ~single_d1_b
+
+    use_d1_a = choose_d1 | single_d1_a
+    use_d1_b = choose_d1 | single_d1_b
+    use_d2_a = choose_d2 | single_d2_a
+    use_d2_b = choose_d2 | single_d2_b
+
+    tris = []
+    if np.any(use_d1_a):
+        tris.append(np.stack([idx00[use_d1_a], idx01[use_d1_a], idx10[use_d1_a]], axis=-1))
+    if np.any(use_d1_b):
+        tris.append(np.stack([idx10[use_d1_b], idx01[use_d1_b], idx11[use_d1_b]], axis=-1))
+    if np.any(use_d2_a):
+        tris.append(np.stack([idx00[use_d2_a], idx01[use_d2_a], idx11[use_d2_a]], axis=-1))
+    if np.any(use_d2_b):
+        tris.append(np.stack([idx00[use_d2_b], idx11[use_d2_b], idx10[use_d2_b]], axis=-1))
+
+    if len(tris) == 0:
         raise GeometryProcessingError(
             "Depth-grid triangulation produced 0 faces; check relative_depth_jump_threshold."
         )
+
+    faces = np.vstack(tris).astype(np.int32)
 
     # Compute vertex normals via Open3D
     temp_mesh = o3d.geometry.TriangleMesh()

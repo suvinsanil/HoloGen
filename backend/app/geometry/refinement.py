@@ -110,16 +110,61 @@ def analyze_mesh_topology(mesh: MeshData) -> MeshTopologyReport:
 def fill_small_mesh_holes(
     mesh: MeshData,
     max_hole_loop_edges: int = 40,
+    max_relative_depth_span: float = 0.15,
+    max_absolute_depth_span: float = 0.40,
 ) -> MeshData:
-    """Repair small interior boundary loops (length <= `max_hole_loop_edges`) via centroid fan triangulation."""
+    """Repair small interior boundary loops (length <= `max_hole_loop_edges`) via centroid fan triangulation.
+
+    Guards against bridging depth layers: loops spanning across depth discontinuities
+    or silhouette edges (relative Z span > `max_relative_depth_span` or absolute delta Z > `max_absolute_depth_span`)
+    are skipped to prevent artificial curtain geometry connecting foreground to background.
+    """
     t0 = time.perf_counter()
     _, loops = extract_boundary_loops(mesh.faces)
     if len(loops) <= 1:
         return mesh
 
-    # Skip the largest outer perimeter boundary loop (loops[0]); fill small interior holes
-    candidate_holes = [lp for lp in loops[1:] if 3 <= len(lp) <= max_hole_loop_edges]
+    # Group boundary loops by connected component.
+    # For open surface sheets, the largest boundary loop of each component is its outer perimeter;
+    # only smaller loops within that same component are true interior surface holes.
+    o3d_m = mesh.to_open3d()
+    tri_clusters, _, _ = o3d_m.cluster_connected_triangles()
+    tri_clusters = np.asarray(tri_clusters, dtype=np.int32)
+    vert_comp = np.full(mesh.num_vertices, -1, dtype=np.int32)
+    for c_id in np.unique(tri_clusters):
+        c_verts = np.unique(mesh.faces[tri_clusters == c_id])
+        vert_comp[c_verts] = c_id
+
+    comp_loops = defaultdict(list)
+    for lp in loops:
+        c_id = int(vert_comp[lp[0]])
+        comp_loops[c_id].append(lp)
+
+    candidate_holes = []
+    for c_id, c_lps in comp_loops.items():
+        if len(c_lps) > 1:
+            c_lps.sort(key=len, reverse=True)
+            for lp in c_lps[1:]:
+                if 3 <= len(lp) <= max_hole_loop_edges:
+                    candidate_holes.append(lp)
+
     if not candidate_holes:
+        return mesh
+
+    # Filter candidates to only genuine planar surface holes
+    valid_holes = []
+    for lp in candidate_holes:
+        lp_arr = np.asarray(lp, dtype=np.int32)
+        v_z = mesh.vertices[lp_arr, 2]
+        z_min = float(np.min(v_z))
+        z_max = float(np.max(v_z))
+        z_span = z_max - z_min
+        rel_span = z_span / max(z_min, 1e-4)
+        if rel_span > max_relative_depth_span or z_span > max_absolute_depth_span:
+            continue
+        valid_holes.append(lp)
+
+    if not valid_holes:
         return mesh
 
     new_verts = [mesh.vertices]
@@ -128,7 +173,7 @@ def fill_small_mesh_holes(
     new_faces = [mesh.faces]
 
     next_v_idx = mesh.num_vertices
-    for loop in candidate_holes:
+    for loop in valid_holes:
         loop_arr = np.asarray(loop, dtype=np.int32)
         centroid_v = np.mean(mesh.vertices[loop_arr], axis=0, keepdims=True).astype(np.float32)
         new_verts.append(centroid_v)
@@ -174,7 +219,7 @@ def fill_small_mesh_holes(
         vertex_uvs=uvs_combined,
         method=mesh.method,
         generation_time_ms=mesh.generation_time_ms + elapsed_ms,
-        parameters={**mesh.parameters, "filled_holes_count": len(candidate_holes)},
+        parameters={**mesh.parameters, "filled_holes_count": len(valid_holes)},
     )
 
 
@@ -184,6 +229,8 @@ def clean_and_refine_mesh(
     keep_only_largest_component: bool = False,
     repair_holes: bool = True,
     max_hole_loop_edges: int = 40,
+    max_relative_depth_span: float = 0.15,
+    max_absolute_depth_span: float = 0.40,
     taubin_smoothing_iterations: int = 5,
     target_faces: Optional[int] = None,
 ) -> MeshData:
@@ -191,6 +238,13 @@ def clean_and_refine_mesh(
     t0 = time.perf_counter()
     if mesh.num_faces == 0:
         raise GeometryProcessingError("Cannot clean a mesh with 0 faces.")
+
+    orig_verts = np.asarray(mesh.vertices, dtype=np.float32)
+    orig_uvs = (
+        np.asarray(mesh.vertex_uvs, dtype=np.float32)
+        if mesh.vertex_uvs is not None and len(mesh.vertex_uvs) == mesh.num_vertices
+        else None
+    )
 
     o3d_mesh = mesh.to_open3d()
     o3d_mesh.remove_degenerate_triangles()
@@ -254,6 +308,14 @@ def clean_and_refine_mesh(
     o3d_mesh.compute_vertex_normals()
     elapsed_ms = (time.perf_counter() - t0) * 1000.0
 
+    out_uvs = None
+    if orig_uvs is not None and len(o3d_mesh.vertices) > 0:
+        from scipy.spatial import cKDTree
+
+        tree = cKDTree(orig_verts)
+        _, nn_idx = tree.query(np.asarray(o3d_mesh.vertices, dtype=np.float32), k=1)
+        out_uvs = orig_uvs[nn_idx]
+
     refined = MeshData.from_open3d(
         o3d_mesh,
         method=f"{mesh.method}_cleaned",
@@ -264,9 +326,15 @@ def clean_and_refine_mesh(
             "taubin_smoothing_iterations": taubin_smoothing_iterations,
             "target_faces": target_faces,
         },
+        vertex_uvs=out_uvs,
     )
 
     if repair_holes:
-        refined = fill_small_mesh_holes(refined, max_hole_loop_edges=max_hole_loop_edges)
+        refined = fill_small_mesh_holes(
+            refined,
+            max_hole_loop_edges=max_hole_loop_edges,
+            max_relative_depth_span=max_relative_depth_span,
+            max_absolute_depth_span=max_absolute_depth_span,
+        )
 
     return refined

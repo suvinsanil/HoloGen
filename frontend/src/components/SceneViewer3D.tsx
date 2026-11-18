@@ -7,9 +7,10 @@ import { CameraFrustum, PointCloudViewerPayload, ViewMode3D } from '../store/use
 interface GLBMeshSurfaceProps {
   glbUrl: string
   viewMode: ViewMode3D
+  onRadiusComputed?: (r: number) => void
 }
 
-function GLBMeshSurface({ glbUrl, viewMode }: GLBMeshSurfaceProps) {
+function GLBMeshSurface({ glbUrl, viewMode, onRadiusComputed }: GLBMeshSurfaceProps) {
   const { scene } = useGLTF(glbUrl)
 
   const clonedScene = useMemo(() => {
@@ -33,6 +34,16 @@ function GLBMeshSurface({ glbUrl, viewMode }: GLBMeshSurfaceProps) {
     return clone
   }, [scene, viewMode])
 
+  useEffect(() => {
+    if (clonedScene) {
+      const box = new THREE.Box3().setFromObject(clonedScene)
+      const sphere = box.getBoundingSphere(new THREE.Sphere())
+      if (sphere.radius > 0.1) {
+        onRadiusComputed?.(sphere.radius)
+      }
+    }
+  }, [clonedScene, onRadiusComputed])
+
   return (
     <Center>
       <primitive object={clonedScene} />
@@ -53,9 +64,10 @@ interface PointCloudObjectProps {
   data: PointCloudViewerPayload
   viewMode: ViewMode3D
   pointSize: number
+  onRadiusComputed?: (r: number) => void
 }
 
-function PointCloudObject({ data, viewMode, pointSize }: PointCloudObjectProps) {
+function PointCloudObject({ data, viewMode, pointSize, onRadiusComputed }: PointCloudObjectProps) {
   const geometry = useMemo(() => {
     const geom = new THREE.BufferGeometry()
     const positions = new Float32Array(data.positions)
@@ -102,6 +114,12 @@ function PointCloudObject({ data, viewMode, pointSize }: PointCloudObjectProps) 
     return geom
   }, [data, viewMode])
 
+  useEffect(() => {
+    if (geometry.boundingSphere && geometry.boundingSphere.radius > 0.1) {
+      onRadiusComputed?.(geometry.boundingSphere.radius)
+    }
+  }, [geometry, onRadiusComputed])
+
   return (
     <Center>
       <points geometry={geometry}>
@@ -115,18 +133,29 @@ function PointCloudObject({ data, viewMode, pointSize }: PointCloudObjectProps) 
   )
 }
 
-function CameraResetController({ resetCounter }: { resetCounter: number }) {
+function CameraResetController({
+  resetCounter,
+  targetRadius,
+}: {
+  resetCounter: number
+  targetRadius: number
+}) {
   const { camera } = useThree()
   const controlsRef = useRef<any>(null)
 
   useEffect(() => {
-    camera.position.set(0, 0.5, 6.5)
+    const perspCamera = camera as THREE.PerspectiveCamera
+    const fov = (perspCamera.fov * Math.PI) / 180
+    const r = targetRadius > 0.5 ? targetRadius : 3.5
+    const dist = Math.max((r / Math.sin(fov / 2)) * 1.15, 4.0)
+
+    camera.position.set(0, r * 0.1, dist)
     camera.lookAt(0, 0, 0)
     if (controlsRef.current) {
       controlsRef.current.target.set(0, 0, 0)
       controlsRef.current.update()
     }
-  }, [resetCounter, camera])
+  }, [resetCounter, camera, targetRadius])
 
   return <OrbitControls ref={controlsRef} makeDefault enableDamping dampingFactor={0.08} />
 }
@@ -194,6 +223,7 @@ export const SceneViewer3D: React.FC<SceneViewer3DProps> = ({
   showGrid,
   cameraResetCounter,
 }) => {
+  const [sceneRadius, setSceneRadius] = React.useState<number>(3.5)
   const useMeshRenderer =
     viewMode === 'mesh' || viewMode === 'wireframe' || (viewMode === 'normals' && !pointCloudData)
 
@@ -210,7 +240,7 @@ export const SceneViewer3D: React.FC<SceneViewer3DProps> = ({
         <directionalLight position={[4, 6, 5]} intensity={lightIntensity} />
         <directionalLight position={[-4, -2, 3]} intensity={lightIntensity * 0.4} />
 
-        <CameraResetController resetCounter={cameraResetCounter} />
+        <CameraResetController resetCounter={cameraResetCounter} targetRadius={sceneRadius} />
 
         {showGrid && (
           <Grid
@@ -229,12 +259,13 @@ export const SceneViewer3D: React.FC<SceneViewer3DProps> = ({
         {isCompleted && projectId && (
           <Suspense fallback={null}>
             {useMeshRenderer && glbUrl ? (
-              <GLBMeshSurface glbUrl={glbUrl} viewMode={viewMode} />
+              <GLBMeshSurface glbUrl={glbUrl} viewMode={viewMode} onRadiusComputed={setSceneRadius} />
             ) : pointCloudData && pointCloudData.count > 0 ? (
               <PointCloudObject
                 data={pointCloudData}
                 viewMode={viewMode}
                 pointSize={pointSize}
+                onRadiusComputed={setSceneRadius}
               />
             ) : null}
             {showFrustums && cameraFrustums.length > 0 && (

@@ -126,7 +126,12 @@ def apply_projective_texturing(
 
     orig_h, orig_w = int(rgb_uint8.shape[0]), int(rgb_uint8.shape[1])
 
-    uvs = compute_projective_uvs(mesh.vertices, intrinsics)
+    # Prefer pre-computed / transferred surface UVs when available (e.g. from 2D depth grid or refinement)
+    # to avoid projective stretching / distortion on smoothed or decimated boundary vertices.
+    if mesh.vertex_uvs is not None and len(mesh.vertex_uvs) == mesh.num_vertices:
+        uvs = mesh.vertex_uvs.copy()
+    else:
+        uvs = compute_projective_uvs(mesh.vertices, intrinsics)
 
     tex_img = rgb_uint8.copy()
     if texture_max_dimension is not None and texture_max_dimension >= 8:
