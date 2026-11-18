@@ -52,10 +52,12 @@ class MultiViewFusionConfig:
     min_inlier_ratio: float = 0.25
     min_fallback_inlier_ratio: float = 0.15
     num_neighbor_views: int = 4
-    min_consistent_views: int = 1
+    min_consistent_views: int = 2
     consistency_rel_depth_thresh: float = 0.10
     consistency_rgb_thresh: float = 0.18  # in [0, 1] (~46 / 255)
     discontinuity_threshold: float = 0.08  # physical ||grad(log Z)||_2 per-pixel jump cutoff (~8%)
+    sparse_depth_cap_mult: float = 1.35  # cap depth at 1.35x 98th percentile of view's SfM sparse depths
+    min_tsdf_view_support: int = 2  # drop extracted TSDF vertices/points supported by < 2 views (when N >= 2)
     tsdf_voxel_length: Optional[float] = None  # auto-scaled from scene extent if None
     tsdf_sdf_trunc_mult: float = 4.0
     max_depth_percentile_clip: float = 98.0
@@ -395,8 +397,15 @@ def filter_depth_by_discontinuity_and_consistency(
     gy = cv2.Sobel(log_z, cv2.CV_32F, 0, 1, ksize=3) * 0.25
     grad_log_z = np.sqrt(gx * gx + gy * gy)
     valid_mask = (grad_log_z <= cfg.discontinuity_threshold) & np.isfinite(aligned_depth) & (aligned_depth > 1e-3)
-    # Clip extreme far tail to avoid TSDF stray background rays
+    # Clip extreme far tail AND cap maximum depth relative to SfM sparse depth
     z_max = float(np.percentile(aligned_depth[valid_mask], cfg.max_depth_percentile_clip)) if np.any(valid_mask) else 10.0
+    if pose.observed_xyz_w.shape[0] >= 5 and cfg.sparse_depth_cap_mult > 0:
+        pts_c_sp = (pose.R_w2c @ pose.observed_xyz_w.T).T + pose.t_w2c[None, :]
+        z_sp = pts_c_sp[:, 2]
+        z_sp = z_sp[z_sp > 1e-3]
+        if len(z_sp) >= 5:
+            sparse_cap = float(np.percentile(z_sp, 98.0)) * cfg.sparse_depth_cap_mult
+            z_max = min(z_max, sparse_cap)
     valid_mask &= aligned_depth <= max(z_max, 0.1)
     rejected_disc_px = int(total_px - int(np.sum(valid_mask)))
 
@@ -457,14 +466,15 @@ def _blend_multiview_vertex_colors(
     depth_intrinsics_map: Dict[str, CameraIntrinsics],
     cache_dir: Path,
     power: float = 2.0,
-) -> np.ndarray:
-    """Apply view-angle-weighted multi-image color blending to fused mesh/cloud vertices."""
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Apply view-angle-weighted multi-image color blending and return (rgb_u8, support_count)."""
     n_verts = len(vertices)
     if n_verts == 0:
-        return np.zeros((0, 3), dtype=np.uint8)
+        return np.zeros((0, 3), dtype=np.uint8), np.zeros((0,), dtype=np.int32)
 
     color_accum = np.zeros((n_verts, 3), dtype=np.float64)
     weight_accum = np.zeros(n_verts, dtype=np.float64)
+    support_count = np.zeros(n_verts, dtype=np.int32)
 
     for name in accepted_names:
         pose = poses[name]
@@ -501,12 +511,13 @@ def _blend_multiview_vertex_colors(
         sampled_rgb = rgb[v[idx], u[idx]].astype(np.float64) / 255.0
         color_accum[idx] += sampled_rgb * weights[:, None]
         weight_accum[idx] += weights
+        support_count[idx] += 1
         del rgb, depth
 
     out_rgb = np.full((n_verts, 3), 0.7, dtype=np.float64)
     has_w = weight_accum > 1e-8
     out_rgb[has_w] = color_accum[has_w] / weight_accum[has_w, None]
-    return np.clip(np.round(out_rgb * 255.0), 0, 255).astype(np.uint8)
+    return np.clip(np.round(out_rgb * 255.0), 0, 255).astype(np.uint8), support_count
 
 
 def fuse_multiview_tsdf_and_mesh(
@@ -717,12 +728,27 @@ def fuse_multiview_tsdf_and_mesh(
 
         verts = np.asarray(o3d_mesh.vertices, dtype=np.float64)
         norms = np.asarray(o3d_mesh.vertex_normals, dtype=np.float64)
-        faces = np.asarray(o3d_mesh.triangles, dtype=np.int32)
 
-        blended_rgb = _blend_multiview_vertex_colors(
+        blended_rgb, support_cnt = _blend_multiview_vertex_colors(
             verts, norms, accepted_names, poses, depth_intrinsics_map, cache_dir
         )
         o3d_mesh.vertex_colors = o3d.utility.Vector3dVector(blended_rgb.astype(np.float64) / 255.0)
+
+        # Drop low-integration-weight TSDF regions (vertices observed by < min_support views)
+        req_support = min(cfg.min_tsdf_view_support, len(accepted_names))
+        if req_support >= 2 and len(verts) > 0:
+            drop_mask = support_cnt < req_support
+            if int(np.sum(~drop_mask)) >= 50:
+                o3d_mesh.remove_vertices_by_mask(drop_mask)
+                o3d_mesh.remove_unreferenced_vertices()
+                o3d_mesh.compute_vertex_normals()
+
+        verts = np.asarray(o3d_mesh.vertices, dtype=np.float64)
+        norms = np.asarray(o3d_mesh.vertex_normals, dtype=np.float64)
+        faces = np.asarray(o3d_mesh.triangles, dtype=np.int32)
+        blended_rgb = np.clip(
+            np.round(np.asarray(o3d_mesh.vertex_colors, dtype=np.float64) * 255.0), 0, 255
+        ).astype(np.uint8)
 
         o3d_pcd = tsdf_vol.extract_point_cloud()
         pcd_pts = np.asarray(o3d_pcd.points, dtype=np.float64)

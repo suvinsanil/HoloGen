@@ -266,3 +266,47 @@ Runtime breakdown (feature extraction / matching / mapping, s): Fountain-8 1.8 /
   1. **Background drift at full-scene view counts (`N=33` Fountain, `N=14` ETH3D):** While SfM sparse-aligned depth halves per-view `Abs Rel` (`0.1972 -> 0.0972`) and raises Fountain recall to `91.4%`, TSDF precision drops sharply at `N=33` (`0.198`) and `N=14` (`0.269`) because `min_consistent_views=1` allows distant background pixels (beyond the foreground reference mesh/scan) to survive when only one neighbor view agrees, inflating `accuracy_mean_m` to `1.815 m` on Fountain and `0.442 m` on ETH3D.
   2. **Single-view (`N=1`) vs. Multi-view (`N=3..14`) F-score:** `N=1` achieves `0.808` F1 (`0.10 m`) on ETH3D because it is aligned directly in-frame against dense visible GT scan pixels and covers only one clean frustum, whereas `Sim(3)`-aligned multi-view fusion integrates across wide-baseline views where `0.6–0.8 px` SfM reprojection and unmasked background tails degrade precision.
   3. **Partial registration on `pipes_N10` (`4/10`):** `DSC_0634..0643` spans a wide viewpoint jump with sparse overlap across intermediate frames (`0637..0642`), so only `4/10` views registered cleanly.
+
+---
+
+## 8b. Phase 7e.2 — Experiment D v2 (Equalized Alignment & Evaluation Protocol)
+- **Script:** `scripts/run_experiment_d_v2.py` -> `outputs/experiment_d_v2/experiment_d_v2_results.json`, `outputs/experiment_d_v2/experiment_d_v2_pr_curves.png`
+- **Changes vs. Experiment D v1:**
+  1. **Equalized Alignment Budget (NO ICP in headline):** Multi-view uses `Sim(3)` Umeyama on recovered camera centres vs. GT/ref centres; Single-view (`N=1`) uses GT/ref pose + **1 global median scale** (`oracle-pose + oracle-scale`, instead of a 2-parameter per-pixel `1/Z = s*d + t` fit to GT depth). Rigid ICP (`SE(3)`, 40 iters, `max_corr = 0.10 m` Fountain / `0.20 m` ETH3D) is supplementary only.
+  2. **Equalized Evaluation Region:** Every reconstruction is cropped to the GT/ref AABB (`+0.10 m` Fountain, `+0.15 m` ETH3D) before computing **both Precision and Recall**, plus a **Frustum-Restricted** variant (only points visible in the `N=1` camera frustum).
+  3. **Greedy Covisibility Subsets:** SfM runs **once** on all views (`33/33` Fountain, `14/14` ETH3D `OPENCV` auto-fallback); `N = 3, 5, 10, all` are selected greedily by shared 3D point covisibility so registration never alters `N`.
+  4. **Improved TSDF Fusion:** `min_consistent_views = 2` for `N >= 3`, max depth capped at `1.35 × p98(sparse_depth)`, and TSDF vertices with `< 2` supporting views dropped.
+  5. **Metrics:** Headline F-score + **Truncated Chamfer** (capped at `0.05 m` Fountain / `0.10 m` ETH3D); raw Chamfer is supplementary only.
+
+### 8b.1 Fountain (`RGB-D Reference`, *not ground truth*, NO ICP Headline)
+*(Consistency tuned on Fountain `N=10`: `relaxed` `0.20/0.30` won F1 `0.8315` vs `default` `0.8228` vs `strict` `0.8189` and was evaluated out-of-sample on ETH3D.)*
+
+| Method | Views (Reg) | Trunc. Chamfer @ `0.05 m` (Raw Supp.) | GT-AABB F1 (`0.02 / 0.05 / 0.10 m`) | GT-AABB Prec / Rec @ `0.05 m` | `N=1` Frustum F1 (`0.05 / 0.10 m`) | ICP Supp. F1 @ `0.05 m` | Fusion Runtime (s) / Peak RSS (MB) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Single-View (`N=1`, oracle scale) | 1 | 0.0449 (0.1358) | 0.071 / 0.225 / 0.441 | 0.203 / 0.252 | 0.240 / 0.467 | 0.661 | 3.07 / — |
+| Multi-View TSDF (`N=3`) | 3 | 0.0236 (0.0395) | 0.467 / 0.753 / 0.867 | **0.974** / 0.613 | 0.817 / 0.920 | 0.758 | 2.36 / 557.7 |
+| Multi-View TSDF (`N=5`) | 5 | **0.0206** (0.0312) | **0.581** / 0.825 / 0.917 | 0.957 / 0.725 | 0.846 / 0.939 | 0.827 | 4.26 / 577.9 |
+| Multi-View TSDF (`N=10`) | 10 | 0.0215 (0.0308) | 0.561 / **0.831** / 0.936 | 0.931 / 0.751 | **0.852** / 0.955 | **0.845** | 8.73 / 588.9 |
+| Multi-View TSDF (`N=33`) | 33 | 0.0250 (0.0307) | 0.477 / 0.792 / **0.967** | 0.704 / **0.904** | 0.806 / **0.969** | 0.841 | 30.53 / 584.6 |
+| SfM Sparse Cloud (filtered, `N=33`) | 33 | **0.0155** (0.0181) | **0.706 / 0.907 / 0.987** | 0.972 / 0.849 | 0.917 / 0.991 | — | — |
+
+### 8b.2 ETH3D `pipes` (`Faro Laser Scan GT`, Out-of-Sample, NO ICP Headline)
+| Method | Views (Reg) | Trunc. Chamfer @ `0.10 m` (Raw Supp.) | GT-AABB F1 (`0.05 / 0.10 / 0.20 m`) | GT-AABB Prec / Rec @ `0.10 m` | `N=1` Frustum F1 (`0.10 / 0.20 m`) | ICP Supp. F1 @ `0.10 m` | Fusion Runtime (s) / Peak RSS (MB) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Single-View (`N=1`, oracle scale) | 1 | 0.0946 (1.0447) | 0.042 / 0.102 / 0.201 | 0.170 / 0.073 | 0.237 / 0.453 | 0.200 | 3.01 / — |
+| Multi-View TSDF (`N=3`) | 3 | 0.0853 (1.1168) | 0.092 / 0.179 / 0.240 | 0.574 / 0.106 | 0.573 / 0.830 | 0.230 | 2.00 / 465.3 |
+| Multi-View TSDF (`N=5`) | 5 | **0.0794** (1.0236) | **0.153** / 0.257 / 0.335 | **0.639** / 0.161 | **0.733 / 0.959** | 0.312 | 3.52 / 489.5 |
+| Multi-View TSDF (`N=10`) | 10 | 0.0852 (0.8221) | 0.146 / 0.236 / 0.340 | 0.405 / 0.166 | 0.687 / 0.927 | 0.314 | 7.28 / 595.5 |
+| Multi-View TSDF (`N=14`) | 14 | 0.0889 (0.4782) | 0.100 / **0.279 / 0.544** | 0.308 / **0.256** | 0.656 / 0.930 | **0.466** | 11.48 / 797.3 |
+| SfM Sparse Cloud (filtered, `N=14`) | 14 | 0.0926 (0.7588) | 0.007 / 0.042 / 0.199 | 0.506 / 0.022 | 0.106 / 0.544 | — | — |
+
+- **Sparse Cloud Investigation (`ETH3D`):** Cropping to the GT AABB and filtering (`track >= 3`, `reproj <= 1.0 px`) yields `97.08%` precision at `0.20 m` (`98.06%` in the `N=1` frustum), confirming frames and units are exact. Raw Chamfer (`0.65–0.76 m`) is high solely because `823–1,160` sparse SIFT keypoints cover only `2.2%` of the `100k` laser scan points at `0.10 m`.
+
+### 8b.3 Per-View GT Depth on ETH3D `pipes` (`14/14` views, Median [IQR])
+| Estimator | GT Depth Used? | Abs Rel $\downarrow$ Med [IQR] | RMSE (m) $\downarrow$ Med [IQR] | $\delta < 1.25$ $\uparrow$ Med [IQR] |
+|---|---|---:|---:|---:|
+| Single-View (median-scale) | 1 param (median scale) | 0.1974 [0.1524] | 1.1312 [0.3524] | 0.7965 [0.3461] |
+| Single-View (oracle scale+shift) | 2 params (fit to GT depth) | 0.0914 [0.0451] | 0.2401 [0.2838] | 0.9413 [0.0611] |
+| **Multi-View SfM-Aligned** | **0 (SfM sparse pts + Sim(3))** | **0.0989 [0.0610]** | **0.2770 [0.3235]** | **0.9160 [0.0783]** |
+
+- **Custom Scene (`datasets/custom_scene_01/`):** Still not present in the workspace (`not_present_in_workspace`).
