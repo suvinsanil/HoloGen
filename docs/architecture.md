@@ -34,3 +34,25 @@ Designed and tested on a constrained local workstation (**NVIDIA GeForce MX330 w
 - **Resolution Guard:** Configurable `max_image_dimension` (default `640`) bounds dense point clouds to $\le 307,200$ points per view.
 - **CUDA Runtime Probe & OOM Fallback:** `detect_compute_device()` executes a test tensor kernel on startup and wraps inference in an automatic `torch.cuda.empty_cache()` + CPU fallback guard.
 - **Localized Model Cache:** Sets `HF_HOME` and `TORCH_HOME` inside `D:\HoloGen\models\cache` so model weights never pollute the OS system drive.
+
+
+---
+
+## 4. Phase 6 Web Application Architecture
+
+```mermaid
+flowchart TD
+    UI["React + TypeScript + R3F Frontend (Vite :5173)"] -->|POST /api/upload| API["FastAPI Router (:8000)"]
+    UI -->|POST /api/reconstruct/:id| API
+    UI -->|GET /api/status/:id| API
+    UI -->|GET /api/export/:id/glb| API
+    API --> DB[("SQLite Metadata (outputs/hologen.sqlite3)")]
+    API --> Q["Concurrency-1 Sequential Worker Queue"]
+    Q --> MM["Singleton DepthModelManager (Loaded Once in 2GB VRAM)"]
+    Q --> PIPE["SingleViewPipeline (Vision -> Geometry -> Export)"]
+    PIPE --> FS[("Local Artifacts (outputs/<project_id>/)")]
+```
+
+- **Singleton Model Preloading (`DepthModelSingletonManager`):** Preloads `depth_anything_v2_small` once during FastAPI lifespan startup and reuses the in-memory model across requests. If a user switches models in the UI, the previous model is explicitly unloaded (`torch.cuda.empty_cache()`) before loading the requested model.
+- **Concurrency-1 Job Queue (`ReconstructionJobQueue`):** Guarantees that at most one reconstruction pipeline runs at any instant on the 7.7 GB RAM / 2 GB VRAM workstation while reporting queue position and stage progress to SQLite.
+- **Strict Input Validation:** Enforces a `15 MB` upload size limit, `4096x4096` raw pixel dimension ceiling, and PIL image header/decode verification before accepting an upload.

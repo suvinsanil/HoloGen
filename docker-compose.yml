@@ -1,0 +1,14 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./outputs:/workspace/outputs
+      - ./models/cache:/workspace/models/cache
+      - ./datasets:/workspace/datasets
+    environment:
+      - HOLOGEN_DEVICE_PREFERENCE=auto
+      - HOLOGEN_MAX_IMAGE_DIMENSION=640

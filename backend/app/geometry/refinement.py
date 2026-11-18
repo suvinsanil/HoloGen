@@ -196,6 +196,7 @@ def clean_and_refine_mesh(
     o3d_mesh.remove_degenerate_triangles()
     o3d_mesh.remove_duplicated_triangles()
     o3d_mesh.remove_non_manifold_edges()
+    o3d_mesh.remove_unreferenced_vertices()
 
     # Connected-component filtering
     triangle_clusters, cluster_n_triangles, _ = o3d_mesh.cluster_connected_triangles()
@@ -219,9 +220,15 @@ def clean_and_refine_mesh(
             o3d_mesh.remove_unreferenced_vertices()
 
     if taubin_smoothing_iterations > 0 and len(o3d_mesh.triangles) > 0:
+        verts_before = np.asarray(o3d_mesh.vertices, dtype=np.float64).copy()
         o3d_mesh = o3d_mesh.filter_smooth_taubin(
             number_of_iterations=int(taubin_smoothing_iterations)
         )
+        verts_after = np.asarray(o3d_mesh.vertices, dtype=np.float64)
+        bad_verts = ~np.all(np.isfinite(verts_after), axis=1)
+        if np.any(bad_verts):
+            verts_after[bad_verts] = verts_before[bad_verts]
+            o3d_mesh.vertices = o3d.utility.Vector3dVector(verts_after)
 
     if target_faces is not None and len(o3d_mesh.triangles) > int(target_faces):
         # Preserve colors via KD-Tree transfer after quadric decimation

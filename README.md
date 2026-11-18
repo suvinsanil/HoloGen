@@ -41,7 +41,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pytest
 ```
 
-### 4. Run Phase 1 Baseline Pipeline
+### 4. Run Single-View Reconstruction CLI (Viewer & Full-Res Presets)
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/run_baseline.py
@@ -49,9 +49,27 @@ python -m venv .venv
 
 Outputs are written to `outputs/<run_id>/`:
 - `input_preprocessed.png` — EXIF-oriented, aspect-resized input RGB image
-- `depth_visualization.png` — Inferno colormap disparity visualization
-- `point_cloud.ply` — Colored 3D point cloud in camera coordinates
-- `run_report.json` — Measured timings, hardware telemetry, intrinsics $K$, quality metrics, and point cloud bounds
+- `depth_visualization.png` & `uncertainty_proxy.png` — Inferno disparity and uncertainty proxy maps
+- `point_cloud.ply` & `mesh.ply` — Cleaned colored 3D point cloud and surface mesh
+- `scene.glb` — Viewer-quality textured glTF 2.0 binary (`~120k` faces, `< 5 MB`)
+- `scene_full.glb` — Full-resolution textured glTF 2.0 binary (`380k–675k` faces)
+- `scene.obj` & `mesh.stl` — Wavefront OBJ and binary STL exports
+- `reconstruction_report.json` & `reconstruction_report.md` — Measured timings, hardware telemetry, intrinsics $K$, View-Frustum Coverage, and uncertainty proxy histogram
+
+### 5. Launch Phase 6 Web Application (FastAPI + React Three Fiber)
+
+```powershell
+# Terminal 1: Start FastAPI backend (preloads singleton depth model on startup, concurrency=1 queue)
+$env:PYTHONPATH = "backend"
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+# Terminal 2: Start React + Vite + Three.js frontend (use npm.cmd on Windows PowerShell)
+cd frontend
+npm.cmd install
+npm.cmd run dev
+```
+
+Open `http://localhost:5173` in your browser to upload images, adjust reconstruction parameters, inspect 2D depth/uncertainty layers alongside the interactive 3D viewport (`Mesh`, `Wireframe`, `RGB`, `Depth`, `Point Cloud`, `Normals`, `Uncertainty Proxy`), and download exported assets.
 
 ---
 
