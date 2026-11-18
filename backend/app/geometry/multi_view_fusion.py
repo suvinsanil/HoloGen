@@ -80,6 +80,8 @@ class ViewFusionStats:
     rejected_discontinuity_pixels: int
     rejected_consistency_pixels: int
     valid_fused_pixels: int
+    heldout_abs_rel: Optional[float] = None
+    heldout_inlier_ratio: Optional[float] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -91,8 +93,11 @@ class ViewFusionStats:
             "shift": round(float(self.shift), 6),
             "num_sparse_points": self.num_sparse_points,
             "inlier_ratio": round(float(self.inlier_ratio), 4),
+            "in_sample_abs_rel": round(float(self.sparse_abs_rel), 4),
             "sparse_abs_rel": round(float(self.sparse_abs_rel), 4),
             "sparse_rmse": round(float(self.sparse_rmse), 4),
+            "heldout_abs_rel": round(float(self.heldout_abs_rel), 4) if self.heldout_abs_rel is not None else None,
+            "heldout_inlier_ratio": round(float(self.heldout_inlier_ratio), 4) if self.heldout_inlier_ratio is not None else None,
             "total_pixels": self.total_pixels,
             "rejected_discontinuity_pixels": self.rejected_discontinuity_pixels,
             "rejected_consistency_pixels": self.rejected_consistency_pixels,
@@ -181,47 +186,20 @@ def _scale_intrinsics_to_size(intr: CameraIntrinsics, target_w: int, target_h: i
     )
 
 
-def align_monocular_disparity_to_sparse_depth(
-    disparity_map: np.ndarray,
-    pose: SfmCameraPose,
-    depth_intrinsics: CameraIntrinsics,
+def _fit_inverse_depth_ransac(
+    d_obs: np.ndarray,
+    z_obs: np.ndarray,
+    full_disparity_map: Optional[np.ndarray],
     cfg: MultiViewFusionConfig,
-) -> Tuple[Optional[np.ndarray], str, float, float, int, float, float, float, Optional[str]]:
-    """Align monocular disparity `d_mono` (larger = closer) to SfM sparse 3D points in inverse-depth space.
-
-    Model: 1 / Z = s * d_mono + t (with s > 0).
-    Falls back to scale-only (t = 0) if RANSAC inlier ratio < `cfg.min_inlier_ratio` OR if
-    `min(s * d_mono + t) <= 1e-4` (non-positive disparity). Rejects view if scale-only also fails.
-
-    Returns:
-        (aligned_depth_map, fit_mode, scale, shift, num_pts, inlier_ratio, abs_rel, rmse, rejection_reason)
-    """
-    h, w = disparity_map.shape[:2]
-    if pose.observed_xyz_w.shape[0] < cfg.min_sparse_points:
-        return None, "rejected", 0.0, 0.0, int(pose.observed_xyz_w.shape[0]), 0.0, float("inf"), float("inf"), "too_few_sparse_points"
-
-    # Transform sparse world points to camera frame & project to depth-map pixel coordinates
-    pts_cam = (pose.R_w2c @ pose.observed_xyz_w.T).T + pose.t_w2c[None, :]
-    z_sfm = pts_cam[:, 2]
-    sx = float(w) / float(pose.intrinsics.width)
-    sy = float(h) / float(pose.intrinsics.height)
-    u_d = np.round(pose.observed_uv[:, 0] * sx).astype(np.int64)
-    v_d = np.round(pose.observed_uv[:, 1] * sy).astype(np.int64)
-
-    valid = (z_sfm > 1e-3) & (u_d >= 0) & (u_d < w) & (v_d >= 0) & (v_d < h)
-    if int(np.sum(valid)) < cfg.min_sparse_points:
-        return None, "rejected", 0.0, 0.0, int(np.sum(valid)), 0.0, float("inf"), float("inf"), "too_few_in_frame_sparse_points"
-
-    z_obs = z_sfm[valid]
-    d_obs = disparity_map[v_d[valid], u_d[valid]].astype(np.float64)
-    inv_z_obs = 1.0 / z_obs
+) -> Tuple[Optional[float], float, float, str, Optional[str]]:
+    """Core RANSAC 2-point affine inverse-depth fit (1/Z = s * d + t) with scale-only fallback."""
     n = len(z_obs)
-
-    # 1. RANSAC 2-point affine fit: inv_z = s * d + t
+    if n < 5:
+        return None, 0.0, 0.0, "rejected", "too_few_sparse_points"
+    inv_z_obs = 1.0 / z_obs
     rng = np.random.default_rng(cfg.seed)
     best_inliers = np.zeros(n, dtype=bool)
     best_cnt = 0
-    best_s, best_t = 1.0, 0.0
 
     for _ in range(cfg.ransac_iterations):
         idx = rng.choice(n, size=2, replace=False)
@@ -242,24 +220,25 @@ def align_monocular_disparity_to_sparse_depth(
         if cnt > best_cnt:
             best_cnt = cnt
             best_inliers = inl
-            best_s, best_t = s_cand, t_cand
 
-    # Least-squares refit on RANSAC inliers
     inlier_ratio = float(best_cnt) / float(n)
     use_scale_only = False
+    s_fit, t_fit = 0.0, 0.0
     if best_cnt >= 4 and inlier_ratio >= cfg.min_inlier_ratio:
         A = np.column_stack([d_obs[best_inliers], np.ones(best_cnt, dtype=np.float64)])
         sol, _, _, _ = np.linalg.lstsq(A, inv_z_obs[best_inliers], rcond=None)
         s_fit, t_fit = float(sol[0]), float(sol[1])
-        min_disp = float(np.min(s_fit * disparity_map.astype(np.float64) + t_fit))
+        min_disp = (
+            float(np.min(s_fit * full_disparity_map.astype(np.float64) + t_fit))
+            if full_disparity_map is not None
+            else float(np.min(s_fit * d_obs + t_fit))
+        )
         if s_fit <= 1e-6 or min_disp <= 1e-4:
             use_scale_only = True
         else:
-            # Recompute inliers after refit
             inv_pred = s_fit * d_obs + t_fit
             z_pred = 1.0 / np.maximum(inv_pred, 1e-6)
-            rel_err = np.abs(z_pred - z_obs) / z_obs
-            inlier_ratio = float(np.mean(rel_err <= cfg.ransac_rel_depth_thresh))
+            inlier_ratio = float(np.mean(np.abs(z_pred - z_obs) / z_obs <= cfg.ransac_rel_depth_thresh))
             if inlier_ratio < cfg.min_inlier_ratio:
                 use_scale_only = True
     else:
@@ -269,24 +248,103 @@ def align_monocular_disparity_to_sparse_depth(
     if use_scale_only:
         pos = d_obs > 1e-3
         if int(np.sum(pos)) < 4:
-            return None, "rejected", 0.0, 0.0, n, inlier_ratio, float("inf"), float("inf"), "non_positive_disparity_samples"
-        # Robust median ratio scale-only fit (t = 0)
+            return None, 0.0, inlier_ratio, "rejected", "non_positive_disparity_samples"
         s_fit = float(np.median(inv_z_obs[pos] / d_obs[pos]))
         t_fit = 0.0
         if s_fit <= 1e-6:
-            return None, "rejected", 0.0, 0.0, n, 0.0, float("inf"), float("inf"), "negative_scale_only_fit"
+            return None, 0.0, 0.0, "rejected", "negative_scale_only_fit"
         inv_pred = np.maximum(s_fit * d_obs, 1e-6)
         z_pred = 1.0 / inv_pred
-        rel_err = np.abs(z_pred - z_obs) / z_obs
-        inlier_ratio = float(np.mean(rel_err <= cfg.ransac_rel_depth_thresh))
+        inlier_ratio = float(np.mean(np.abs(z_pred - z_obs) / z_obs <= cfg.ransac_rel_depth_thresh))
         if inlier_ratio < cfg.min_fallback_inlier_ratio:
-            return None, "rejected", s_fit, 0.0, n, inlier_ratio, float(np.mean(rel_err)), float(np.sqrt(np.mean((z_pred - z_obs) ** 2))), "low_inlier_ratio_after_scale_only_fallback"
+            return None, 0.0, inlier_ratio, "rejected", "low_inlier_ratio_after_scale_only_fallback"
         fit_mode = "scale_only_fallback"
+
+    return s_fit, t_fit, inlier_ratio, fit_mode, None
+
+
+def evaluate_heldout_sparse_alignment(
+    disparity_map: np.ndarray,
+    pose: SfmCameraPose,
+    cfg: MultiViewFusionConfig,
+    train_frac: float = 0.8,
+) -> Tuple[Optional[float], Optional[float]]:
+    """Fit (scale, shift) on 80% of sparse points and evaluate Abs Rel and inlier ratio on the held-out 20%."""
+    h, w = disparity_map.shape[:2]
+    if pose.observed_xyz_w.shape[0] < 15:
+        return None, None
+    pts_cam = (pose.R_w2c @ pose.observed_xyz_w.T).T + pose.t_w2c[None, :]
+    z_sfm = pts_cam[:, 2]
+    sx = float(w) / float(pose.intrinsics.width)
+    sy = float(h) / float(pose.intrinsics.height)
+    u_d = np.round(pose.observed_uv[:, 0] * sx).astype(np.int64)
+    v_d = np.round(pose.observed_uv[:, 1] * sy).astype(np.int64)
+    valid = (z_sfm > 1e-3) & (u_d >= 0) & (u_d < w) & (v_d >= 0) & (v_d < h)
+    if int(np.sum(valid)) < 15:
+        return None, None
+
+    z_obs = z_sfm[valid]
+    d_obs = disparity_map[v_d[valid], u_d[valid]].astype(np.float64)
+    rng = np.random.default_rng(cfg.seed + 991)
+    perm = rng.permutation(len(z_obs))
+    n_train = max(8, int(round(train_frac * len(z_obs))))
+    if n_train >= len(z_obs) - 2:
+        return None, None
+
+    tr_idx, te_idx = perm[:n_train], perm[n_train:]
+    s_fit, t_fit, _, _, rej = _fit_inverse_depth_ransac(d_obs[tr_idx], z_obs[tr_idx], disparity_map, cfg)
+    if s_fit is None or rej is not None:
+        return None, None
+
+    inv_pred_te = np.maximum(s_fit * d_obs[te_idx] + t_fit, 1e-4)
+    z_pred_te = 1.0 / inv_pred_te
+    rel_err_te = np.abs(z_pred_te - z_obs[te_idx]) / z_obs[te_idx]
+    return float(np.mean(rel_err_te)), float(np.mean(rel_err_te <= cfg.ransac_rel_depth_thresh))
+
+
+def align_monocular_disparity_to_sparse_depth(
+    disparity_map: np.ndarray,
+    pose: SfmCameraPose,
+    depth_intrinsics: CameraIntrinsics,
+    cfg: MultiViewFusionConfig,
+) -> Tuple[Optional[np.ndarray], str, float, float, int, float, float, float, Optional[str]]:
+    """Align monocular disparity `d_mono` (larger = closer) to SfM sparse 3D points in inverse-depth space.
+
+    Model: 1 / Z = s * d_mono + t (with s > 0).
+    Falls back to scale-only (t = 0) if RANSAC inlier ratio < `cfg.min_inlier_ratio` OR if
+    `min(s * d_mono + t) <= 1e-4` (non-positive disparity). Rejects view if scale-only also fails.
+
+    Returns:
+        (aligned_depth_map, fit_mode, scale, shift, num_pts, inlier_ratio, in_sample_abs_rel, rmse, rejection_reason)
+    """
+    h, w = disparity_map.shape[:2]
+    if pose.observed_xyz_w.shape[0] < cfg.min_sparse_points:
+        return None, "rejected", 0.0, 0.0, int(pose.observed_xyz_w.shape[0]), 0.0, float("inf"), float("inf"), "too_few_sparse_points"
+
+    pts_cam = (pose.R_w2c @ pose.observed_xyz_w.T).T + pose.t_w2c[None, :]
+    z_sfm = pts_cam[:, 2]
+    sx = float(w) / float(pose.intrinsics.width)
+    sy = float(h) / float(pose.intrinsics.height)
+    u_d = np.round(pose.observed_uv[:, 0] * sx).astype(np.int64)
+    v_d = np.round(pose.observed_uv[:, 1] * sy).astype(np.int64)
+
+    valid = (z_sfm > 1e-3) & (u_d >= 0) & (u_d < w) & (v_d >= 0) & (v_d < h)
+    if int(np.sum(valid)) < cfg.min_sparse_points:
+        return None, "rejected", 0.0, 0.0, int(np.sum(valid)), 0.0, float("inf"), float("inf"), "too_few_in_frame_sparse_points"
+
+    z_obs = z_sfm[valid]
+    d_obs = disparity_map[v_d[valid], u_d[valid]].astype(np.float64)
+    n = len(z_obs)
+
+    s_fit, t_fit, inlier_ratio, fit_mode, rej_reason = _fit_inverse_depth_ransac(
+        d_obs, z_obs, disparity_map, cfg
+    )
+    if s_fit is None or rej_reason is not None:
+        return None, "rejected", 0.0, 0.0, n, inlier_ratio, float("inf"), float("inf"), rej_reason
 
     inv_z_map = np.maximum(s_fit * disparity_map.astype(np.float64) + t_fit, 1e-4)
     aligned_depth = (1.0 / inv_z_map).astype(np.float32)
 
-    # Evaluate alignment quality against sparse SfM depths
     z_pred_obs = aligned_depth[v_d[valid], u_d[valid]].astype(np.float64)
     abs_rel = float(np.mean(np.abs(z_pred_obs - z_obs) / z_obs))
     rmse = float(np.sqrt(np.mean((z_pred_obs - z_obs) ** 2)))
@@ -522,12 +580,14 @@ def fuse_multiview_tsdf_and_mesh(
             aligned_d, fit_mode, s_fit, t_fit, n_pts, inl_ratio, abs_rel, rmse, rej_reason = (
                 align_monocular_disparity_to_sparse_depth(depth_pred.disparity_map, pose, intr_d, cfg)
             )
+            ho_abs_rel, ho_inl_ratio = evaluate_heldout_sparse_alignment(depth_pred.disparity_map, pose, cfg)
             if aligned_d is None:
                 num_rejected += 1
                 partial_stats[name] = {
                     "fit_mode": "rejected", "rejected": True, "rejection_reason": rej_reason,
                     "scale": s_fit, "shift": t_fit, "num_sparse_points": n_pts, "inlier_ratio": inl_ratio,
                     "abs_rel": abs_rel, "rmse": rmse,
+                    "heldout_abs_rel": ho_abs_rel, "heldout_inlier_ratio": ho_inl_ratio,
                 }
             else:
                 if fit_mode == "scale_only_fallback":
@@ -540,6 +600,7 @@ def fuse_multiview_tsdf_and_mesh(
                     "fit_mode": fit_mode, "rejected": False, "rejection_reason": None,
                     "scale": s_fit, "shift": t_fit, "num_sparse_points": n_pts, "inlier_ratio": inl_ratio,
                     "abs_rel": abs_rel, "rmse": rmse,
+                    "heldout_abs_rel": ho_abs_rel, "heldout_inlier_ratio": ho_inl_ratio,
                 }
 
             del bgr, rgb_full, rgb_resized, depth_pred, aligned_d
@@ -584,6 +645,8 @@ def fuse_multiview_tsdf_and_mesh(
                         sparse_abs_rel=ps["abs_rel"], sparse_rmse=ps["rmse"],
                         total_pixels=0, rejected_discontinuity_pixels=0,
                         rejected_consistency_pixels=0, valid_fused_pixels=0,
+                        heldout_abs_rel=ps.get("heldout_abs_rel"),
+                        heldout_inlier_ratio=ps.get("heldout_inlier_ratio"),
                     )
                 )
                 continue
@@ -618,6 +681,8 @@ def fuse_multiview_tsdf_and_mesh(
                     inlier_ratio=ps["inlier_ratio"], sparse_abs_rel=ps["abs_rel"], sparse_rmse=ps["rmse"],
                     total_pixels=t_px, rejected_discontinuity_pixels=r_disc,
                     rejected_consistency_pixels=r_cons, valid_fused_pixels=v_px,
+                    heldout_abs_rel=ps.get("heldout_abs_rel"),
+                    heldout_inlier_ratio=ps.get("heldout_inlier_ratio"),
                 )
             )
 

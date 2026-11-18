@@ -163,7 +163,7 @@ $$\alpha^* = \arg\min_{\alpha} \text{Chamfer}_{L_2}(\mathcal{M}(\alpha), Q_{\tex
 
 ## 5b. Phase 7b.5 — Multi-Pair × Multi-Seed Two-View Benchmark & Gauss-Newton Ablation
 - **Script:** `scripts/run_phase_7b5.py` -> `outputs/phase_7b5/phase_7b5_results.json`
-- **Protocol:** 10 overlapping image pairs per scene × 3 RANSAC seeds (`[42, 101, 2026]`) = **30 runs per method per scene**. The exact same SIFT mutual-ratio matches are passed to all four methods. ETH3D `pipes` pairs use `pycolmap`-undistorted `PINHOLE` images (`1600×1066`, `fx=884.61, fy=891.95`) so fisheye distortion no longer confounds the comparison.
+- **Protocol:** 10 overlapping image pairs per scene × 3 RANSAC seeds (`[42, 101, 2026]`) = **30 runs per method per scene**. Pairs were selected for sufficient visual overlap (`>= 30` mutual SIFT matches on Fountain; top-10 pairs with `>= 40` matches on ETH3D `pipes`). The exact same SIFT mutual-ratio matches are passed to all four methods. ETH3D `pipes` pairs use `pycolmap`-undistorted `PINHOLE` images (`1600×1066`, `fx=884.61, fy=891.95`) so fisheye distortion no longer confounds the comparison.
 - **Ablation (`refine_essential_gn`):** Compares iterative 8-point $F$ refit + post-hoc $E$ projection (`no_gn`) against adding 5-DoF Levenberg–Marquardt / damped Gauss–Newton on $\text{SO}(3)\times\mathbb{S}^2$ minimizing signed pixel Sampson error (`with_gn`).
 
 | Scene (10 pairs × 3 seeds = 30 runs) | Method | Rot. Error (°) Med [IQR] | Trans. Dir. Error (°) Med [IQR] | Reproj. RMSE (px) Med [IQR] | Runtime (ms) Med [IQR] |
@@ -179,7 +179,7 @@ $$\alpha^* = \arg\min_{\alpha} \text{Chamfer}_{L_2}(\mathcal{M}(\alpha), Q_{\tex
 
 - **Key Takeaways:**
   1. Adding 5-DoF Sampson Gauss–Newton (`with_gn`) eliminates the post-projection drift: on ETH3D `pipes`, median reprojection RMSE drops from `2.314 px` (IQR `11.890`) to **`0.321 px`** (IQR `0.171`), and median translation-direction error drops from `4.900°` to **`0.904°`**, matching `pycolmap` (`0.883°`, `0.343 px`) and OpenCV (`1.155°`, `0.401 px`) at ~`21 ms` extra runtime.
-  2. On Fountain, all three calibrated methods plateau around ~`1.0°` rotation error and ~`3.3°–3.6°` translation-direction error against `key.log`, confirming that ~`1°` is partly the RGB-D reference trajectory's own noise floor rather than solver error.
+  2. On Fountain, all four methods plateau around `~1.0°` rotation error and `~3.3°–5.8°` translation-direction error against `key.log`; because this `~1°` floor is shared across all four methods (including `pycolmap` and OpenCV), it reflects the RGB-D reference trajectory's own noise floor rather than solver error.
 
 ---
 
@@ -208,3 +208,16 @@ Runtime breakdown (feature extraction / matching / mapping, s): Fountain-8 1.8 /
   6. **Reproducibility caveat:** multi-threaded pycolmap is not bit-deterministic across runs.
   7. In the unit test on 5 consecutive Fountain views (nearly collinear centres), the Umeyama-rotation error was 2.58° while the best-global-rotation error and pairwise relative rotation error were ~1°. The centre-only Sim(3) leaves rotation about the trajectory axis poorly constrained, so we report both measures and the collinearity ratio $\sigma_2/\sigma_1$ of the centres.
 - **Visuals:** `outputs/phase_7b/*_sparse_sfm.png` (sparse cloud + camera centres with viewing-direction arrows, trajectory overlay vs reference, per-view observation counts) and `*_sparse_aligned.ply` (Sim(3)-aligned sparse clouds).
+
+---
+
+## 7. Phase 7c & 7c.5 — Sparse-Aligned Depth, 80/20 Held-Out Validation & TSDF Fusion
+- **Scripts:** `scripts/run_phase_7c.py` -> `outputs/phase_7c/phase_7c_results.json`; `scripts/run_phase_7c5.py` -> `outputs/phase_7c5/phase_7c5_results.json`
+- **Sparse Alignment Validation (80/20 Held-Out Check):** Fitting `1/Z = s * d_mono + t` on 80% of each view's SfM sparse points and evaluating on the held-out 20% confirms that the sparse alignment generalizes without overfitting:
+
+| Scene | Registered / Accepted / Fallbacks / Rejected | In-Sample Fit Error (Abs Rel Med) | Held-Out 20% Abs Rel (Med [Min–Max]) | Held-Out 20% Inlier Ratio (Med [Min–Max]) | Whole-Pipeline Peak RSS (MB) | Whole-Pipeline Runtime (s) |
+|---|---|---:|---:|---:|---:|---:|
+| **Fountain (10 views)** *(RGB-D ref.)* | 10 / 10 / 0 / 0 | 0.0159 | **0.0158** [0.0076–0.0749] | **1.000** [0.7619–1.000] | **876.2** (SfM 782.7 / Fusion 875.9) | 25.74 |
+| **ETH3D `pipes` (14 views)** *(GT)* | 14 / 14 / 0 / 0 | 0.0511 | **0.0519** [0.0162–0.1271] | **0.9524** [0.7200–1.000] | **1,961.3** (SfM 1961.3 / Fusion 807.0) | 62.42 |
+
+- **Consistency Threshold Policy:** The small Fountain sweep in `outputs/phase_7c/phase_7c_results.json` (`strict` 270.7k faces vs. `default` 352.8k vs. `relaxed` 442.2k) is reported only to verify pixel-rejection sensitivity. **Consistency thresholds are NOT selected by point or face count.** In Experiment D (Phase 7e), thresholds are tuned on Fountain and evaluated out-of-sample on ETH3D `pipes` by precision and F-score against the laser scan.

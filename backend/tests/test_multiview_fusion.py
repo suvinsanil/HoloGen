@@ -71,6 +71,13 @@ def test_sparse_depth_alignment_ransac_and_scale_only_fallback(tmp_path) -> None
     assert inl_ratio >= 0.80
     np.testing.assert_allclose(aligned, Z_true, rtol=1e-2)
 
+    from app.geometry.multi_view_fusion import evaluate_heldout_sparse_alignment
+
+    ho_abs_rel, ho_inl = evaluate_heldout_sparse_alignment(d_mono, pose, cfg, train_frac=0.8)
+    assert ho_abs_rel is not None and ho_inl is not None
+    assert ho_inl >= 0.70
+    assert ho_abs_rel < 0.25
+
     # Test view rejection when sparse points are completely random / corrupted
     pose_bad = _make_pose("bad.png", tmp_path / "bad.png", 0.0, xyz_w[:12].copy(), intr)
     pose_bad.observed_xyz_w[:, 2] = rng.uniform(0.5, 50.0, 12)
