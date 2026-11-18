@@ -1,0 +1,32 @@
+[
+  {
+    "filename": "sample_01_building.jpg",
+    "url": "https://raw.githubusercontent.com/opencv/opencv/4.x/samples/data/building.jpg",
+    "title": "Architectural Building Exterior (OpenCV Sample Data)",
+    "source_repo": "https://github.com/opencv/opencv/tree/4.x/samples/data",
+    "license": "Apache-2.0",
+    "scene_type": "Outdoor architectural facade with strong perspective depth planes",
+    "sha256": "742a1baad62ac82e91e718e77eedf7e85c2eddc4badfb8c87c6cbc86c45a8b07",
+    "size_bytes": 79718
+  },
+  {
+    "filename": "sample_02_aloe_indoor.jpg",
+    "url": "https://raw.githubusercontent.com/opencv/opencv/4.x/samples/data/aloeL.jpg",
+    "title": "Middlebury Aloe Plant Tabletop Scene (OpenCV / Middlebury Stereo)",
+    "source_repo": "https://github.com/opencv/opencv/tree/4.x/samples/data",
+    "license": "Apache-2.0 (OpenCV distribution of Middlebury stereo benchmark sample)",
+    "scene_type": "Indoor close-range plant with multi-layer self-occlusions and sharp depth discontinuities",
+    "sha256": "cce5736808efe80d9f04b118dbb978c344d4345672b332718c3e039a3eeb8eee",
+    "size_bytes": 315069
+  },
+  {
+    "filename": "sample_03_home_scene.jpg",
+    "url": "https://raw.githubusercontent.com/opencv/opencv/4.x/samples/data/home.jpg",
+    "title": "Residential House & Foreground Foliage (OpenCV Sample Data)",
+    "source_repo": "https://github.com/opencv/opencv/tree/4.x/samples/data",
+    "license": "Apache-2.0",
+    "scene_type": "Outdoor residential building with foreground/background separation",
+    "sha256": "23b8cf46a1965d0ec33459b875aed43187802834db49e0daa9fa2cc842e9d8d2",
+    "size_bytes": 32197
+  }
+]

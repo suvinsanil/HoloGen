@@ -1,0 +1,48 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python bytecode and cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+build/
+dist/
+
+# Model weights and caches (never commit weights)
+models/cache/
+models/weights/
+models/*.pt
+models/*.pth
+models/*.onnx
+models/*.safetensors
+models/*.bin
+
+# Generated outputs and databases
+outputs/*
+!outputs/.gitkeep
+*.db
+*.sqlite
+*.sqlite3
+
+# Datasets (except committed samples and metadata)
+datasets/nyu_v2/
+datasets/kitti/
+datasets/dtu/
+datasets/eth3d/
+
+# Frontend build & node_modules
+frontend/node_modules/
+frontend/dist/
+
+# OS & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
