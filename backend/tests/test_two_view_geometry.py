@@ -175,8 +175,16 @@ def test_from_scratch_vs_opencv_vs_pycolmap_on_synthetic_scene_with_outliers() -
         errs = compute_pose_errors_deg(res.R, res.t, R_gt, t_gt)
         assert errs["rotation_error_deg"] < 0.05, f"{res.method} rot err: {errs}"
         assert errs["translation_direction_error_deg"] < 0.05, f"{res.method} trans err: {errs}"
-        assert res.rmse_reprojection_error_px < 1e-3
+        # At least 78/80 true inliers recovered; at most 2 random outliers that happen to lie within the
+        # threshold of the epipolar line (two-view geometry cannot reject those).
+        assert int(np.sum(res.inlier_mask[:80])) >= 78, f"{res.method} missed true inliers"
+        assert int(np.sum(res.inlier_mask[80:])) <= 2, f"{res.method} false inliers"
+        assert res.median_reprojection_error_px < 1e-3
         assert res.num_cheirality_valid >= 78
+    # Ours and OpenCV recover all 80 true inliers and reject every synthetic outlier on this scene.
+    for res in (res_scratch, res_opencv):
+        assert bool(np.all(res.inlier_mask[:80]))
+        assert res.rmse_reprojection_error_px < 1e-3
 
     # Verify DLT triangulated points from our from-scratch pipeline match X_gt up to baseline scale
     scale_gt = float(np.linalg.norm(t_gt))

@@ -677,10 +677,16 @@ def estimate_two_view_pycolmap_baseline(
     intrinsics1: CameraIntrinsics,
     intrinsics2: Optional[CameraIntrinsics] = None,
     max_error_px: float = 1.5,
+    seed: int = 42,
 ) -> TwoViewGeometryResult:
-    """Comparison baseline using `pycolmap.estimate_calibrated_two_view_geometry`."""
+    """Comparison baseline using `pycolmap.estimate_calibrated_two_view_geometry`.
+
+    pycolmap's RANSAC uses a process-global RNG, so results depend on prior pycolmap calls in the
+    same process unless seeded; we call `pycolmap.set_random_seed(seed)` for reproducibility.
+    """
     import pycolmap
 
+    pycolmap.set_random_seed(int(seed))
     t0 = time.perf_counter()
     intr2 = intrinsics2 or intrinsics1
     K1 = intrinsics1.K
