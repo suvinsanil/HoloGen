@@ -29,6 +29,17 @@ def download_with_progress(url: str, dest: Path) -> None:
     print(f"Finished {dest.name} ({dest.stat().st_size / (1024*1024):.2f} MB)")
 
 
+def safe_extract_7z(archive_path: Path, target_dir: Path) -> None:
+    """Safely extract 7z archive preventing Zip Slip / path traversal attacks."""
+    resolved_target = target_dir.resolve()
+    with py7zr.SevenZipFile(archive_path, mode="r") as z:
+        for fname in z.getnames():
+            dest = (resolved_target / fname).resolve()
+            if not dest.is_relative_to(resolved_target):
+                raise RuntimeError(f"Zip slip / path traversal detected in archive member: {fname}")
+        z.extractall(path=resolved_target)
+
+
 def main() -> int:
     # 1. Open3D SampleFountainRGBDImages (reference RGB-D reconstruction)
     fountain_root = DATASETS_DIR / "fountain"
@@ -49,11 +60,9 @@ def main() -> int:
     if not (extract_dir / "pipes").exists():
         extract_dir.mkdir(parents=True, exist_ok=True)
         print(f"Extracting {jpg_7z.name} ...")
-        with py7zr.SevenZipFile(jpg_7z, mode="r") as z:
-            z.extractall(path=extract_dir)
+        safe_extract_7z(jpg_7z, extract_dir)
         print(f"Extracting {scan_7z.name} ...")
-        with py7zr.SevenZipFile(scan_7z, mode="r") as z:
-            z.extractall(path=extract_dir)
+        safe_extract_7z(scan_7z, extract_dir)
 
     print("All multi-view datasets ready in", extract_dir)
     return 0

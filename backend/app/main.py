@@ -53,10 +53,17 @@ ALLOWED_LOCAL_HOSTS = {
     "testserver",
 }
 
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "SAMEORIGIN",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+}
+
 
 @app.middleware("http")
 async def local_origin_and_host_guard(request: Request, call_next):
-    """Prevent DNS rebinding and cross-origin state-changing attacks against the local API."""
+    """Prevent DNS rebinding, cross-origin state-changing attacks, and attach security headers."""
     # 1. DNS Rebinding check: Host header must target localhost/127.0.0.1/[::1]/testserver
     raw_host = request.headers.get("host", "")
     host = raw_host.split(":")[0].strip().lower()
@@ -64,6 +71,7 @@ async def local_origin_and_host_guard(request: Request, call_next):
         return JSONResponse(
             status_code=403,
             content={"detail": f"Forbidden: DNS rebinding protection rejected external host '{raw_host}'."},
+            headers=SECURITY_HEADERS,
         )
 
     # 2. Cross-origin state-changing protection for POST/PUT/DELETE/PATCH
@@ -81,6 +89,7 @@ async def local_origin_and_host_guard(request: Request, call_next):
                 return JSONResponse(
                     status_code=403,
                     content={"detail": f"Forbidden: Cross-origin request from external origin '{origin}' is not permitted."},
+                    headers=SECURITY_HEADERS,
                 )
 
         referer = request.headers.get("referer")
@@ -99,9 +108,13 @@ async def local_origin_and_host_guard(request: Request, call_next):
                 return JSONResponse(
                     status_code=403,
                     content={"detail": "Forbidden: Cross-origin request from external referer is not permitted."},
+                    headers=SECURITY_HEADERS,
                 )
 
-    return await call_next(request)
+    response = await call_next(request)
+    for k, v in SECURITY_HEADERS.items():
+        response.headers[k] = v
+    return response
 
 
 app.add_middleware(

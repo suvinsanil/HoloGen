@@ -91,9 +91,12 @@ def test_generated_filenames_only_and_path_traversal_guards() -> None:
 def test_api_upload_validation_and_e2e_reconstruct_export() -> None:
     """Verify upload limits/validation and full upload -> reconstruct -> status -> export GLB flow."""
     with TestClient(app) as client:
-        # 1. Health check verifies singleton model preloaded
+        # 1. Health check verifies singleton model preloaded and security headers
         health = client.get("/api/health")
         assert health.status_code == 200
+        assert health.headers.get("x-content-type-options") == "nosniff"
+        assert health.headers.get("x-frame-options") == "SAMEORIGIN"
+        assert health.headers.get("referrer-policy") == "strict-origin-when-cross-origin"
         h_data = health.json()
         assert h_data["status"] == "ok"
         assert h_data["loaded_model"] == "depth_anything_v2_small"

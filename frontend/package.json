@@ -4,12 +4,12 @@
   "version": "0.6.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port 5173 --host",
+    "dev": "vite --port 5173 --host 127.0.0.1",
     "build": "tsc -b && vite build",
-    "preview": "vite preview --port 4173"
+    "preview": "vite preview --port 4173 --host 127.0.0.1"
   },
   "dependencies": {
-    "@react-three/drei": "9.117.3",
+    "@react-three/drei": "9.122.0",
     "@react-three/fiber": "8.17.10",
     "lucide-react": "0.460.0",
     "react": "18.3.1",
@@ -25,13 +25,15 @@
     "@vitejs/plugin-react": "4.3.4",
     "autoprefixer": "10.4.20",
     "esbuild-wasm": "0.21.5",
-    "postcss": "8.4.49",
+    "postcss": "8.5.33",
     "tailwindcss": "3.4.15",
     "typescript": "5.6.3",
-    "vite": "5.4.11"
+    "vite": "6.4.6"
   },
   "overrides": {
     "rollup": "npm:@rollup/wasm-node@4.27.3",
-    "esbuild": "npm:esbuild-wasm@0.21.5"
+    "esbuild": "npm:esbuild-wasm@0.21.5",
+    "postcss": "8.5.33",
+    "uuid": "^11.1.1"
   }
 }
