@@ -120,6 +120,16 @@ class ReconstructionJobQueue:
                 return self._queued_ids.index(project_id) + 1
             return 0
 
+    def queue_depth(self) -> int:
+        """Return the number of currently queued (waiting) jobs."""
+        with self._lock:
+            return len(self._queued_ids)
+
+    def is_active_or_queued(self, project_id: str) -> bool:
+        """Return True if project_id is currently executing or waiting in the queue."""
+        with self._lock:
+            return self._active_job_id == project_id or project_id in self._queued_ids
+
     def enqueue(
         self,
         project_id: str,
@@ -219,8 +229,8 @@ class ReconstructionJobQueue:
                     project_id=project_id,
                     status="failed",
                     progress_pct=0,
-                    stage_message=f"Reconstruction failed: {exc}",
-                    error_message=str(exc),
+                    stage_message="Reconstruction failed due to an internal processing error.",
+                    error_message=type(exc).__name__,
                 )
             finally:
                 with self._lock:

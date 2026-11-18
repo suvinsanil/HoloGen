@@ -21,6 +21,10 @@ COPY models/README.md /workspace/models/README.md
 ENV PYTHONPATH=/workspace/backend
 ENV HOLOGEN_DEVICE_PREFERENCE=auto
 
+RUN groupadd --system hologen && useradd --system --gid hologen --create-home hologen \
+    && chown -R hologen:hologen /workspace
+USER hologen
+
 EXPOSE 8000
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -134,7 +134,7 @@ class PreprocessingResult:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "source_path": self.source_path,
+            "source_path": Path(self.source_path).name,
             "original_size": {"width": self.original_size[0], "height": self.original_size[1]},
             "processed_size": {"width": self.processed_size[0], "height": self.processed_size[1]},
             "resize_scale": round(self.resize_scale, 6),

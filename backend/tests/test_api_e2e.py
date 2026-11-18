@@ -174,3 +174,53 @@ def test_api_upload_validation_and_e2e_reconstruct_export() -> None:
         assert glb_resp.status_code == 200
         assert glb_resp.content[:4] == b"glTF"
         assert len(glb_resp.content) > 500
+
+
+def test_upload_strips_exif_gps_and_hides_server_paths() -> None:
+    """Uploaded images must have EXIF/GPS PII stripped on disk and reports must not leak local paths."""
+    from app.vision.preprocessing import preprocess_image
+
+    settings = get_settings()
+    img = Image.new("RGB", (64, 64), color=(120, 140, 160))
+    exif = img.getexif()
+    exif[0x010F] = "SecretMake"
+    exif[0x0110] = "SecretModel"
+    exif[0x8825] = {1: "N", 2: (37.0, 46.0, 0.0), 3: "W", 4: (122.0, 25.0, 0.0)}
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", exif=exif.tobytes())
+    buf.seek(0)
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/upload",
+            files={"file": ("gps_photo.jpg", buf.getvalue(), "image/jpeg")},
+            data={"name": "privacy_test", "mode": "single_view"},
+        )
+        assert resp.status_code == 200
+        project_id = resp.json()["project_id"]
+
+    saved_path = settings.outputs_dir / project_id / "input_original.jpg"
+    assert saved_path.exists()
+    with Image.open(saved_path) as saved_img:
+        saved_exif = saved_img.getexif()
+        assert len(saved_exif) == 0
+
+    prep = preprocess_image(saved_path, max_dimension=128)
+    prep_dict = prep.to_dict()
+    assert prep_dict["source_path"] == "input_original.jpg"
+    assert "/" not in prep_dict["source_path"]
+    assert "\\" not in prep_dict["source_path"]
+
+
+def test_upload_rejects_corrupted_image_and_path_traversal() -> None:
+    """Corrupted uploads return sanitized 400 and path-traversal project IDs are rejected."""
+    with TestClient(app) as client:
+        bad_resp = client.post(
+            "/api/upload",
+            files={"file": ("bad.jpg", b"not-a-real-jpeg", "image/jpeg")},
+        )
+        assert bad_resp.status_code == 400
+        assert bad_resp.json()["detail"] == "Corrupted or invalid image file."
+
+        trav_resp = client.get("/api/status/..%2Fetc%2Fpasswd")
+        assert trav_resp.status_code in (400, 404)

@@ -12,7 +12,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 import numpy as np
 import open3d as o3d
-from PIL import Image
+from PIL import Image, ImageOps
 import torch
 
 from app.core.config import get_settings
@@ -36,9 +36,13 @@ logger = get_logger("api.routes")
 
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024  # 15 MB strict upload limit
 MAX_RAW_DIMENSION = 4096  # 4096x4096 max raw pixel dimension guard
+MAX_QUEUE_DEPTH = 10  # Cap pending queue depth to prevent resource exhaustion
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "application/octet-stream"}
 SAFE_PROJECT_ID_RE = re.compile(r"^[a-zA-Z0-9_\-]{1,80}$")
+
+# Enforce a strict pixel ceiling matching MAX_RAW_DIMENSION against decompression bombs
+Image.MAX_IMAGE_PIXELS = MAX_RAW_DIMENSION * MAX_RAW_DIMENSION
 
 router = APIRouter(prefix="/api")
 
@@ -178,9 +182,10 @@ async def _validate_and_read_image(file: UploadFile) -> tuple[bytes, str, str]:
         pil_img.verify()
         pil_img = Image.open(io.BytesIO(raw_bytes))
         pil_img.load()
+        pil_img = ImageOps.exif_transpose(pil_img)
     except Exception as exc:
         raise HTTPException(
-            status_code=400, detail=f"Corrupted or invalid image file: {exc}"
+            status_code=400, detail="Corrupted or invalid image file."
         ) from exc
 
     orig_w, orig_h = pil_img.size
@@ -192,7 +197,22 @@ async def _validate_and_read_image(file: UploadFile) -> tuple[bytes, str, str]:
                 f"{MAX_RAW_DIMENSION}x{MAX_RAW_DIMENSION}."
             ),
         )
-    return raw_bytes, ext, filename
+
+    # Strip EXIF/GPS/XMP/device-fingerprint metadata before persisting to disk
+    fmt_map = {".jpg": "JPEG", ".jpeg": "JPEG", ".png": "PNG", ".webp": "WEBP"}
+    save_fmt = fmt_map.get(ext, "PNG")
+    if save_fmt == "JPEG" and pil_img.mode not in ("RGB", "L"):
+        pil_img = pil_img.convert("RGB")
+    clean_img = Image.new(pil_img.mode, pil_img.size)
+    clean_img.paste(pil_img)
+    buf = io.BytesIO()
+    if save_fmt == "JPEG":
+        clean_img.save(buf, format="JPEG", quality=95)
+    elif save_fmt == "WEBP":
+        clean_img.save(buf, format="WEBP", quality=95)
+    else:
+        clean_img.save(buf, format="PNG")
+    return buf.getvalue(), ext, filename
 
 
 @router.post("/upload", response_model=ProjectStatusResponse)
@@ -316,6 +336,16 @@ def start_reconstruction(
         raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found.")
 
     q = get_job_queue()
+    if q.is_active_or_queued(project_id):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Project '{project_id}' is already queued or running.",
+        )
+    if q.queue_depth() >= MAX_QUEUE_DEPTH:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Reconstruction queue is full (max {MAX_QUEUE_DEPTH} pending jobs). Try again later.",
+        )
     q.enqueue(
         project_id=project_id,
         params=request,
