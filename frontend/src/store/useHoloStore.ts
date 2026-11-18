@@ -49,6 +49,16 @@ export interface ProjectStatus {
   available_exports: string[]
 }
 
+export interface CameraFrustum {
+  image_name: string
+  center: [number, number, number]
+  right: [number, number, number]
+  up: [number, number, number]
+  forward: [number, number, number]
+  fov_x_deg: number
+  fov_y_deg: number
+}
+
 export interface PointCloudViewerPayload {
   count: number
   positions: number[]
@@ -69,6 +79,7 @@ interface HoloState {
   bgColor: string
   pointSize: number
   showGrid: boolean
+  showFrustums: boolean
   cameraResetCounter: number
   isUploading: boolean
   errorBanner: string | null
@@ -80,13 +91,16 @@ interface HoloState {
   setBgColor: (color: string) => void
   setPointSize: (size: number) => void
   setShowGrid: (show: boolean) => void
+  setShowFrustums: (show: boolean) => void
   triggerCameraReset: () => void
   setErrorBanner: (msg: string | null) => void
 
   fetchProjects: () => Promise<void>
   selectProject: (projectId: string) => Promise<void>
   uploadFile: (file: File) => Promise<void>
+  uploadMultiFiles: (files: File[]) => Promise<void>
   runReconstruction: () => Promise<void>
+  cancelReconstruction: () => Promise<void>
   pollActiveProject: () => Promise<void>
 }
 
@@ -113,6 +127,7 @@ export const useHoloStore = create<HoloState>((set, get) => ({
   bgColor: '#0b0f19',
   pointSize: 0.035,
   showGrid: true,
+  showFrustums: true,
   cameraResetCounter: 0,
   isUploading: false,
   errorBanner: null,
@@ -125,6 +140,7 @@ export const useHoloStore = create<HoloState>((set, get) => ({
   setBgColor: (bgColor) => set({ bgColor }),
   setPointSize: (pointSize) => set({ pointSize }),
   setShowGrid: (showGrid) => set({ showGrid }),
+  setShowFrustums: (showFrustums) => set({ showFrustums }),
   triggerCameraReset: () =>
     set((state) => ({ cameraResetCounter: state.cameraResetCounter + 1 })),
   setErrorBanner: (errorBanner) => set({ errorBanner }),
@@ -196,6 +212,57 @@ export const useHoloStore = create<HoloState>((set, get) => ({
     }
   },
 
+  uploadMultiFiles: async (files: File[]) => {
+    if (files.length < 2) {
+      set({ errorBanner: 'Multi-view mode requires at least 2 images.' })
+      return
+    }
+    set({ isUploading: true, errorBanner: null })
+    try {
+      const formData = new FormData()
+      files.forEach((f) => formData.append('files', f))
+      formData.append('name', `MultiView (${files.length} views)`)
+
+      const resp = await fetch('/api/upload-multi', {
+        method: 'POST',
+        body: formData,
+      })
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({}))
+        throw new Error(errData.detail || `Multi-view upload failed (HTTP ${resp.status})`)
+      }
+      const proj: ProjectStatus = await resp.json()
+      set((state) => ({
+        activeProject: proj,
+        projects: [proj, ...state.projects.filter((p) => p.project_id !== proj.project_id)],
+        pointCloudData: null,
+        imageTab: 'input',
+      }))
+    } catch (err: any) {
+      set({ errorBanner: err.message })
+    } finally {
+      set({ isUploading: false })
+    }
+  },
+
+  cancelReconstruction: async () => {
+    const active = get().activeProject
+    if (!active) return
+    try {
+      const resp = await fetch(`/api/cancel/${active.project_id}`, { method: 'POST' })
+      if (!resp.ok) return
+      const updated: ProjectStatus = await resp.json()
+      set((state) => ({
+        activeProject: updated,
+        projects: state.projects.map((p) =>
+          p.project_id === updated.project_id ? updated : p
+        ),
+      }))
+    } catch {
+      // Ignore transient cancel errors
+    }
+  },
+
   runReconstruction: async () => {
     const active = get().activeProject
     if (!active) return
@@ -228,7 +295,20 @@ export const useHoloStore = create<HoloState>((set, get) => ({
   pollActiveProject: async () => {
     const active = get().activeProject
     if (!active) return
-    if (!['queued', 'preprocessing', 'estimating_depth', 'building_point_cloud', 'meshing_and_texturing', 'exporting'].includes(active.status)) {
+    if (
+      ![
+        'queued',
+        'preprocessing',
+        'estimating_depth',
+        'building_point_cloud',
+        'meshing_and_texturing',
+        'exporting',
+        'running_sfm',
+        'running_depth_alignment',
+        'running_fusion',
+        'running_export',
+      ].includes(active.status)
+    ) {
       return
     }
     try {

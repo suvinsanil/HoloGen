@@ -61,6 +61,7 @@ export function App() {
     bgColor,
     pointSize,
     showGrid,
+    showFrustums,
     cameraResetCounter,
     isUploading,
     errorBanner,
@@ -71,12 +72,15 @@ export function App() {
     setBgColor,
     setPointSize,
     setShowGrid,
+    setShowFrustums,
     triggerCameraReset,
     setErrorBanner,
     fetchProjects,
     selectProject,
     uploadFile,
+    uploadMultiFiles,
     runReconstruction,
+    cancelReconstruction,
     pollActiveProject,
   } = useHoloStore()
 
@@ -96,13 +100,25 @@ export function App() {
   const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      await uploadFile(e.dataTransfer.files[0])
+      const files = Array.from(e.dataTransfer.files)
+      if (params.mode === 'multi_view' || files.length > 1) {
+        if (params.mode !== 'multi_view') setParams({ mode: 'multi_view' })
+        await uploadMultiFiles(files)
+      } else {
+        await uploadFile(files[0])
+      }
     }
   }
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      await uploadFile(e.target.files[0])
+      const files = Array.from(e.target.files)
+      if (params.mode === 'multi_view' || files.length > 1) {
+        if (params.mode !== 'multi_view') setParams({ mode: 'multi_view' })
+        await uploadMultiFiles(files)
+      } else {
+        await uploadFile(files[0])
+      }
     }
   }
 
@@ -115,6 +131,10 @@ export function App() {
       'building_point_cloud',
       'meshing_and_texturing',
       'exporting',
+      'running_sfm',
+      'running_depth_alignment',
+      'running_fusion',
+      'running_export',
     ].includes(activeProject.status)
 
   const isCompleted = activeProject?.status === 'completed'
@@ -242,6 +262,7 @@ export function App() {
               <input
                 ref={fileInputRef}
                 type="file"
+                multiple={params.mode === 'multi_view'}
                 accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
                 onChange={handleFileChange}
                 className="hidden"
@@ -474,6 +495,15 @@ export function App() {
                 <p className="text-[11px] text-slate-400 mt-1.5">
                   {activeProject.stage_message}
                 </p>
+                {isRunning && (
+                  <button
+                    type="button"
+                    onClick={cancelReconstruction}
+                    className="mt-2 w-full py-1.5 px-3 rounded-lg bg-rose-950/80 hover:bg-rose-900 border border-rose-500/40 text-rose-200 text-[11px] font-medium transition"
+                  >
+                    Cancel Reconstruction
+                  </button>
+                )}
               </div>
             )}
           </section>
@@ -568,6 +598,8 @@ export function App() {
                   isCompleted={Boolean(isCompleted)}
                   viewMode={viewMode3D}
                   pointCloudData={pointCloudData}
+                  cameraFrustums={report?.camera_frustums || []}
+                  showFrustums={showFrustums}
                   lightIntensity={lightIntensity}
                   bgColor={bgColor}
                   pointSize={pointSize}
@@ -635,6 +667,14 @@ export function App() {
                       onChange={(e) => setShowGrid(e.target.checked)}
                     />
                     <span>Grid</span>
+                  </label>
+                  <label className="ml-2 inline-flex items-center gap-1 text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showFrustums}
+                      onChange={(e) => setShowFrustums(e.target.checked)}
+                    />
+                    <span>Frustums</span>
                   </label>
                 </div>
               </div>

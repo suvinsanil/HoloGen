@@ -2,7 +2,7 @@ import React, { Suspense, useEffect, useMemo, useRef } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
 import { OrbitControls, Center, useGLTF, Grid } from '@react-three/drei'
 import * as THREE from 'three'
-import { PointCloudViewerPayload, ViewMode3D } from '../store/useHoloStore'
+import { CameraFrustum, PointCloudViewerPayload, ViewMode3D } from '../store/useHoloStore'
 
 interface GLBMeshSurfaceProps {
   glbUrl: string
@@ -131,11 +131,49 @@ function CameraResetController({ resetCounter }: { resetCounter: number }) {
   return <OrbitControls ref={controlsRef} makeDefault enableDamping dampingFactor={0.08} />
 }
 
+function CameraFrustumsOverlay({ frustums }: { frustums: CameraFrustum[] }) {
+  const geometry = useMemo(() => {
+    const verts: number[] = []
+    const scale = 0.25
+    for (const f of frustums) {
+      const c = new THREE.Vector3(...f.center)
+      const r = new THREE.Vector3(...f.right)
+      const u = new THREE.Vector3(...f.up)
+      const fwd = new THREE.Vector3(...f.forward)
+      const halfW = scale * Math.tan(((f.fov_x_deg || 60) * Math.PI) / 360)
+      const halfH = scale * Math.tan(((f.fov_y_deg || 45) * Math.PI) / 360)
+      const base = c.clone().addScaledVector(fwd, scale)
+      const p0 = base.clone().addScaledVector(r, -halfW).addScaledVector(u, halfH)
+      const p1 = base.clone().addScaledVector(r, halfW).addScaledVector(u, halfH)
+      const p2 = base.clone().addScaledVector(r, halfW).addScaledVector(u, -halfH)
+      const p3 = base.clone().addScaledVector(r, -halfW).addScaledVector(u, -halfH)
+      const segs = [
+        [c, p0], [c, p1], [c, p2], [c, p3],
+        [p0, p1], [p1, p2], [p2, p3], [p3, p0],
+      ]
+      for (const [a, b] of segs) {
+        verts.push(a.x, a.y, a.z, b.x, b.y, b.z)
+      }
+    }
+    const geom = new THREE.BufferGeometry()
+    geom.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3))
+    return geom
+  }, [frustums])
+
+  return (
+    <lineSegments geometry={geometry}>
+      <lineBasicMaterial color="#38bdf8" opacity={0.85} transparent />
+    </lineSegments>
+  )
+}
+
 interface SceneViewer3DProps {
   projectId: string | null
   isCompleted: boolean
   viewMode: ViewMode3D
   pointCloudData: PointCloudViewerPayload | null
+  cameraFrustums?: CameraFrustum[]
+  showFrustums?: boolean
   lightIntensity: number
   bgColor: string
   pointSize: number
@@ -148,6 +186,8 @@ export const SceneViewer3D: React.FC<SceneViewer3DProps> = ({
   isCompleted,
   viewMode,
   pointCloudData,
+  cameraFrustums = [],
+  showFrustums = true,
   lightIntensity,
   bgColor,
   pointSize,
@@ -197,6 +237,9 @@ export const SceneViewer3D: React.FC<SceneViewer3DProps> = ({
                 pointSize={pointSize}
               />
             ) : null}
+            {showFrustums && cameraFrustums.length > 0 && (
+              <CameraFrustumsOverlay frustums={cameraFrustums} />
+            )}
           </Suspense>
         )}
       </Canvas>

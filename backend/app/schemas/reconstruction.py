@@ -26,6 +26,9 @@ class ReconstructRequest(BaseModel):
     smoothing_iterations: int = Field(default=4, ge=0, le=20)
     uncertainty_threshold: float = Field(default=0.75, ge=0.1, le=1.0)
     discontinuity_threshold: float = Field(default=0.08, ge=0.02, le=0.5)
+    consistency_rel_depth_thresh: float = Field(default=0.10, ge=0.02, le=0.5)
+    consistency_rgb_thresh: float = Field(default=0.18, ge=0.02, le=0.8)
+    timeout_seconds: float = Field(default=600.0, ge=5.0, le=3600.0)
     run_synchronously: bool = Field(
         default=False,
         description="If true, waits for the concurrency-1 worker to finish before returning.",

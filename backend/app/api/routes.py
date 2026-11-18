@@ -149,13 +149,8 @@ def get_health() -> HealthResponse:
     )
 
 
-@router.post("/upload", response_model=ProjectStatusResponse)
-async def upload_image(
-    file: UploadFile = File(...),
-    name: Optional[str] = Form(default=None),
-    mode: str = Form(default="single_view"),
-) -> ProjectStatusResponse:
-    """Validate uploaded image type, byte size, and pixel dimensions, then create a project."""
+async def _validate_and_read_image(file: UploadFile) -> tuple[bytes, str, str]:
+    """Validate uploaded image extension, content-type, byte size, and decoded dimensions."""
     filename = file.filename or "upload.png"
     ext = Path(filename).suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
@@ -197,6 +192,17 @@ async def upload_image(
                 f"{MAX_RAW_DIMENSION}x{MAX_RAW_DIMENSION}."
             ),
         )
+    return raw_bytes, ext, filename
+
+
+@router.post("/upload", response_model=ProjectStatusResponse)
+async def upload_image(
+    file: UploadFile = File(...),
+    name: Optional[str] = Form(default=None),
+    mode: str = Form(default="single_view"),
+) -> ProjectStatusResponse:
+    """Validate uploaded image type, byte size, and pixel dimensions, then create a project."""
+    raw_bytes, ext, filename = await _validate_and_read_image(file)
 
     settings = get_settings()
     # Security: Use purely server-generated project_id and filename on disk; never embed user filename in paths
@@ -232,6 +238,69 @@ async def upload_image(
         initial_report=initial_report,
     )
     return _record_to_status_response(rec)
+
+
+@router.post("/upload-multi", response_model=ProjectStatusResponse)
+async def upload_multi_images(
+    files: List[UploadFile] = File(...),
+    name: Optional[str] = Form(default=None),
+) -> ProjectStatusResponse:
+    """Validate 2-40 uploaded images and create a multi-view reconstruction project."""
+    if len(files) < 2 or len(files) > 40:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Multi-view upload requires 2 to 40 images, got {len(files)}.",
+        )
+
+    settings = get_settings()
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    short_uid = uuid.uuid4().hex[:8]
+    project_id = f"proj_{ts}_{short_uid}"
+    validate_project_id(project_id)
+
+    out_dir = settings.outputs_dir / project_id
+    inputs_dir = out_dir / "inputs"
+    inputs_dir.mkdir(parents=True, exist_ok=True)
+
+    saved_paths: List[Path] = []
+    for idx, f in enumerate(files):
+        raw_bytes, ext, _ = await _validate_and_read_image(f)
+        dst = inputs_dir / f"view_{idx:03d}{ext}"
+        dst.write_bytes(raw_bytes)
+        saved_paths.append(dst)
+
+    # Preview thumbnail from first view
+    prep = preprocess_image(saved_paths[0], max_dimension=settings.max_image_dimension)
+    Image.fromarray(prep.rgb_uint8, mode="RGB").save(out_dir / "input_preprocessed.png")
+
+    display_name = re.sub(r"[^a-zA-Z0-9_\-\s]", "", (name or f"MultiView ({len(saved_paths)} views)")).strip()[:48]
+    if not display_name:
+        display_name = project_id
+
+    db = get_db()
+    rec = db.create_project(
+        project_id=project_id,
+        name=display_name,
+        source_image_path=saved_paths[0],
+        output_dir=out_dir,
+        mode="multi_view",
+        initial_report={"run_id": project_id, "num_input_images": len(saved_paths)},
+    )
+    return _record_to_status_response(rec)
+
+
+@router.post("/cancel/{project_id}", response_model=ProjectStatusResponse)
+def cancel_reconstruction(project_id: str) -> ProjectStatusResponse:
+    """Cancel a queued or running reconstruction job."""
+    validate_project_id(project_id)
+    db = get_db()
+    rec = db.get_project(project_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found.")
+    q = get_job_queue()
+    q.cancel(project_id)
+    updated = db.get_project(project_id)
+    return _record_to_status_response(updated or rec)
 
 
 @router.post("/reconstruct/{project_id}", response_model=ProjectStatusResponse)
