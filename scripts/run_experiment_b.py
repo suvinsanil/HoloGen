@@ -1,12 +1,7 @@
-"""Experiment B Runner: Surface Mesh Reconstruction Comparison on Identical Inputs.
+"""Experiment B Runner: Surface Mesh Reconstruction Comparison & Alpha Shape Parameter Sweep.
 
-Compares 6 surface meshing methods on identical preprocessed depth & point cloud input:
-1. depth_grid_baseline (Depth-grid triangulation with discontinuity edge cutting at 8% jump)
-2. depth_grid_cleaned_repaired (Depth-grid + island removal + Taubin smoothing + hole repair)
-3. poisson_depth8_raw (Screened Poisson octree depth 8 without density trimming — shows hidden bubble invention)
-4. poisson_depth8_trimmed (Screened Poisson octree depth 8 with 8% low-density quantile trimming)
-5. ball_pivoting (Ball Pivoting Algorithm with multi-scale radii [1.5, 2.5, 4.0] * d_nn)
-6. alpha_shape (3D Alpha Shapes with alpha = 3.2 * d_nn)
+Compares 6 surface meshing methods on identical preprocessed depth & point cloud input,
+and sweeps the `alpha` parameter across [0.06, 0.09, 0.12, 0.18, 0.30] for 3D Alpha Shapes.
 """
 
 import json
@@ -56,7 +51,7 @@ def save_mesh_ply(mesh: MeshData, output_path: Path) -> Path:
 
 
 def render_mesh_preview(mesh: MeshData, output_path: Path, canvas_size: int = 480) -> None:
-    """Render side-by-side shaded normal-lit front view and wireframe/side view of a mesh."""
+    """Render side-by-side shaded normal-lit front view and side profile view of a mesh."""
     canvas = np.full((canvas_size, canvas_size * 2, 3), 24, dtype=np.uint8)
     if mesh.num_faces == 0 or mesh.num_vertices == 0:
         cv2.imwrite(str(output_path), canvas)
@@ -74,7 +69,6 @@ def render_mesh_preview(mesh: MeshData, output_path: Path, canvas_size: int = 48
         else np.full_like(verts, 0.75)
     )
 
-    # Lambertian directional shading combined with vertex color
     light_dir = np.array([0.2, -0.3, -0.93], dtype=np.float32)
     light_dir /= np.linalg.norm(light_dir)
     lambert = np.clip(np.abs(np.sum(norms * light_dir, axis=1, keepdims=True)), 0.25, 1.0)
@@ -86,16 +80,13 @@ def render_mesh_preview(mesh: MeshData, output_path: Path, canvas_size: int = 48
     margin = 24
     usable = canvas_size - 2 * margin
 
-    # Sort triangles back-to-front by centroid Z
     tri_centroids = np.mean(verts[mesh.faces], axis=1)
     tri_order = np.argsort(-tri_centroids[:, 2])
 
-    # Project vertices to Front (XY)
     u_f = margin + ((verts[:, 0] - min_b[0]) / span[0] * usable).astype(np.int32)
     v_f = margin + ((verts[:, 1] - min_b[1]) / span[1] * usable).astype(np.int32)
     pts_2d_f = np.stack([u_f, v_f], axis=-1)
 
-    # Draw up to 40,000 sorted triangles for crisp preview
     step = max(1, len(tri_order) // 40000)
     for tid in tri_order[::step]:
         f = mesh.faces[tid]
@@ -103,7 +94,6 @@ def render_mesh_preview(mesh: MeshData, output_path: Path, canvas_size: int = 48
         color = tuple(int(c) for c in shaded_bgr[f[0]])
         cv2.fillConvexPoly(canvas[:, :canvas_size], poly, color, lineType=cv2.LINE_AA)
 
-    # Panel 2: Side view (ZY) of mesh vertices — clearly shows Poisson's hallucinated back bubble!
     u_s = canvas_size + margin + ((verts[:, 2] - min_b[2]) / span[2] * usable).astype(np.int32)
     v_s = margin + ((verts[:, 1] - min_b[1]) / span[1] * usable).astype(np.int32)
     valid_s = (
@@ -160,7 +150,7 @@ def main() -> int:
     model = create_depth_model("depth_anything_v2_small", device=device)
     model.load()
     pred = model.predict(prep.rgb_uint8)
-    refined = refine_depth_map(pred.depth_map, prep.rgb_uint8, method="bilateral")
+    refined = refine_depth_map(pred.depth_map, prep.rgb_uint8, method="none")
 
     raw_cloud = backproject_depth_to_point_cloud(
         depth_map=refined.refined_depth,
@@ -174,7 +164,28 @@ def main() -> int:
     exp_dir = settings.outputs_dir / "experiment_b"
     exp_dir.mkdir(parents=True, exist_ok=True)
 
-    # Construct the 6 mesh variants on identical input
+    # First: Run Alpha Shape parameter sweep across 5 alpha values
+    alpha_candidates = [0.06, 0.09, 0.12, 0.18, 0.30]
+    alpha_sweep_results = []
+    best_alpha_mesh = None
+    best_alpha_chamfer = float("inf")
+
+    for alpha_val in alpha_candidates:
+        m_a = reconstruct_mesh_alpha_shape(clean_cloud, alpha=alpha_val, max_points=35000)
+        m_a.method = f"alpha_shape_a{alpha_val:.2f}"
+        ev_a = evaluate_mesh_reconstruction(m_a, reference_cloud=clean_cloud, threshold_tau=0.04)
+        row_a = {
+            "alpha": alpha_val,
+            **ev_a.to_dict(),
+        }
+        alpha_sweep_results.append(row_a)
+        if ev_a.chamfer_l2 < best_alpha_chamfer:
+            best_alpha_chamfer = ev_a.chamfer_l2
+            best_alpha_mesh = m_a
+
+    assert best_alpha_mesh is not None
+    best_alpha_mesh.method = f"6_alpha_shape_best_a{best_alpha_mesh.parameters['alpha']:.2f}"
+
     meshes: list[MeshData] = []
 
     # 1. Depth-grid triangulation (baseline with discontinuity edge cutting)
@@ -199,7 +210,7 @@ def main() -> int:
     m_dg_clean.method = "2_depth_grid_cleaned_repaired"
     meshes.append(m_dg_clean)
 
-    # 3. Screened Poisson (octree depth 8, raw untrimmed — shows bubble invention on 2.5D clouds)
+    # 3. Screened Poisson (octree depth 8, raw untrimmed)
     m_poisson_raw = reconstruct_mesh_poisson(
         clean_cloud, octree_depth=8, density_quantile_trim=0.0
     )
@@ -220,10 +231,8 @@ def main() -> int:
     m_bpa.method = "5_ball_pivoting"
     meshes.append(m_bpa)
 
-    # 6. 3D Alpha Shapes
-    m_alpha = reconstruct_mesh_alpha_shape(clean_cloud, alpha=None, max_points=35000)
-    m_alpha.method = "6_alpha_shape"
-    meshes.append(m_alpha)
+    # 6. Best 3D Alpha Shape from sweep
+    meshes.append(best_alpha_mesh)
 
     results = []
     for m in meshes:
@@ -240,13 +249,18 @@ def main() -> int:
         results.append(row)
 
     payload = {
-        "experiment": "Experiment B: Surface Mesh Reconstruction Methods Comparison",
+        "experiment": "Experiment B: Surface Mesh Reconstruction Methods Comparison & Alpha Sweep",
         "git_commit": commit_hash,
+        "reference_note": (
+            "Reference is the input cleaned point cloud (not external ground-truth scan); "
+            "metrics measure geometric fidelity to the input cloud."
+        ),
         "input_image": sample_path.name,
         "processed_resolution": f"{prep.width}x{prep.height}",
         "reference_clean_cloud_points": clean_cloud.num_points,
         "completeness_threshold_tau": 0.04,
         "methods": results,
+        "alpha_shape_sweep": alpha_sweep_results,
     }
 
     out_json = exp_dir / "experiment_b_results.json"

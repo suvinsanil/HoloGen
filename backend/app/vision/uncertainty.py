@@ -42,8 +42,33 @@ class UncertaintyProxyResult:
         return float(np.percentile(self.uncertainty_proxy_map, 90.0))
 
     @property
+    def p95_uncertainty_proxy(self) -> float:
+        return float(np.percentile(self.uncertainty_proxy_map, 95.0))
+
+    @property
+    def p99_uncertainty_proxy(self) -> float:
+        return float(np.percentile(self.uncertainty_proxy_map, 99.0))
+
+    @property
     def reliable_pixel_fraction(self) -> float:
         return float(np.mean(self.reliable_mask))
+
+    def histogram_summary(self) -> Dict[str, float]:
+        """Compute percentage of pixels falling into interpretable uncertainty proxy bins."""
+        u = self.uncertainty_proxy_map.ravel()
+        n = max(float(u.size), 1.0)
+        edges = [0.0, 0.02, 0.05, 0.10, 0.25, 0.50, 0.75, 1.0001]
+        labels = [
+            "[0.00, 0.02)",
+            "[0.02, 0.05)",
+            "[0.05, 0.10)",
+            "[0.10, 0.25)",
+            "[0.25, 0.50)",
+            "[0.50, 0.75)",
+            "[0.75, 1.00]",
+        ]
+        counts, _ = np.histogram(u, bins=edges)
+        return {label: round(float(c) * 100.0 / n, 2) for label, c in zip(labels, counts)}
 
     def to_metadata_dict(self) -> Dict[str, Any]:
         return {
@@ -54,7 +79,10 @@ class UncertaintyProxyResult:
             "mean_uncertainty_proxy": round(self.mean_uncertainty_proxy, 4),
             "median_uncertainty_proxy": round(self.median_uncertainty_proxy, 4),
             "p90_uncertainty_proxy": round(self.p90_uncertainty_proxy, 4),
+            "p95_uncertainty_proxy": round(self.p95_uncertainty_proxy, 4),
+            "p99_uncertainty_proxy": round(self.p99_uncertainty_proxy, 4),
             "reliable_pixel_fraction": round(self.reliable_pixel_fraction, 4),
+            "histogram_pct": self.histogram_summary(),
             "processing_time_ms": round(self.processing_time_ms, 3),
         }
 

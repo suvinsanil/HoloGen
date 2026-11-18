@@ -1,4 +1,4 @@
-"""Full single-view 3D reconstruction pipeline (Phases 1-5)."""
+"""Full single-view 3D reconstruction pipeline (Phases 1-5.5)."""
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -65,6 +65,7 @@ class SingleViewRunResult:
     depth_png_path: Path
     ply_path: Path
     glb_path: Path
+    glb_full_path: Optional[Path]
     obj_path: Path
     stl_path: Path
     report_json_path: Path
@@ -74,7 +75,7 @@ class SingleViewRunResult:
 
 
 class SingleViewPipeline:
-    """End-to-end single-view 3D reconstruction pipeline (Phases 1-5)."""
+    """End-to-end single-view 3D reconstruction pipeline (Phases 1-5.5)."""
 
     def __init__(
         self,
@@ -95,8 +96,11 @@ class SingleViewPipeline:
         max_dimension: Optional[int] = None,
         fov_deg: Optional[float] = None,
         focal_length_px: Optional[float] = None,
-        refinement_method: Literal["none", "bilateral", "guided", "guided_bilateral"] = "bilateral",
+        refinement_method: Optional[Literal["none", "bilateral", "guided", "guided_bilateral"]] = None,
         mesh_method: Literal["depth_grid", "poisson", "ball_pivoting", "alpha_shape"] = "depth_grid",
+        quality_preset: Literal["viewer", "full"] = "viewer",
+        viewer_target_faces: int = 120000,
+        export_both_presets: bool = True,
         discontinuity_threshold: float = 0.08,
         uncertainty_threshold: float = 0.75,
         smoothing_iterations: int = 4,
@@ -111,11 +115,17 @@ class SingleViewPipeline:
             stem = Path(image_input).stem if isinstance(image_input, (str, Path)) else "image"
             run_id = f"{stem}_{ts}"
 
+        ref_method = refinement_method or self.settings.default_refinement_method
         base_dir = Path(output_base_dir) if output_base_dir else self.settings.outputs_dir
         out_dir = base_dir / run_id
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        logger.info("Starting SingleViewPipeline run_id=%s", run_id)
+        logger.info(
+            "Starting SingleViewPipeline run_id=%s (refinement=%s, preset=%s)",
+            run_id,
+            ref_method,
+            quality_preset,
+        )
 
         # 1. Preprocessing & Quality Checks
         prep = preprocess_image(
@@ -142,11 +152,11 @@ class SingleViewPipeline:
         self.depth_model.load()
         depth_pred = self.depth_model.predict(prep.rgb_uint8)
 
-        # 4. Edge-Preserving Depth Refinement
+        # 4. Edge-Preserving Depth Refinement (defaults to "none" per Experiment A findings)
         depth_ref = refine_depth_map(
             depth_map=depth_pred.depth_map,
             rgb_uint8=prep.rgb_uint8,
-            method=refinement_method,
+            method=ref_method,
             discontinuity_threshold=discontinuity_threshold,
         )
 
@@ -172,7 +182,7 @@ class SingleViewPipeline:
         density_stats = compute_point_cloud_density_stats(clean_cloud)
         clean_time_ms = (time.perf_counter() - t_clean0) * 1000.0
 
-        # 7. Surface Mesh Reconstruction & Cleanup
+        # 7. Surface Mesh Reconstruction & Cleanup (Full Resolution + Viewer Decimation Preset)
         t_mesh0 = time.perf_counter()
         if mesh_method == "depth_grid":
             raw_mesh = reconstruct_mesh_depth_grid(
@@ -182,52 +192,68 @@ class SingleViewPipeline:
                 relative_depth_jump_threshold=discontinuity_threshold,
                 stride=1,
             )
-            mesh = clean_and_refine_mesh(
+            full_mesh = clean_and_refine_mesh(
                 raw_mesh,
                 min_component_faces=40,
                 repair_holes=True,
                 max_hole_loop_edges=36,
                 taubin_smoothing_iterations=smoothing_iterations,
-                target_faces=target_faces,
+                target_faces=None,
             )
         elif mesh_method == "poisson":
             raw_mesh = reconstruct_mesh_poisson(
                 clean_cloud, octree_depth=8, density_quantile_trim=0.08
             )
-            mesh = clean_and_refine_mesh(
+            full_mesh = clean_and_refine_mesh(
                 raw_mesh,
                 min_component_faces=40,
                 repair_holes=False,
                 taubin_smoothing_iterations=max(0, smoothing_iterations // 2),
-                target_faces=target_faces,
+                target_faces=None,
             )
         elif mesh_method == "ball_pivoting":
             raw_mesh = reconstruct_mesh_ball_pivoting(clean_cloud)
-            mesh = clean_and_refine_mesh(
+            full_mesh = clean_and_refine_mesh(
                 raw_mesh,
                 min_component_faces=20,
                 repair_holes=True,
                 taubin_smoothing_iterations=smoothing_iterations,
-                target_faces=target_faces,
+                target_faces=None,
             )
         elif mesh_method == "alpha_shape":
             raw_mesh = reconstruct_mesh_alpha_shape(clean_cloud)
-            mesh = clean_and_refine_mesh(
+            full_mesh = clean_and_refine_mesh(
                 raw_mesh,
                 min_component_faces=10,
                 repair_holes=False,
                 taubin_smoothing_iterations=smoothing_iterations,
-                target_faces=target_faces,
+                target_faces=None,
             )
         else:
             raise ValueError(f"Unsupported mesh_method: {mesh_method}")
 
-        topo = analyze_mesh_topology(mesh)
+        effective_target_faces = target_faces
+        if effective_target_faces is None and quality_preset == "viewer":
+            effective_target_faces = int(viewer_target_faces)
+
+        if effective_target_faces is not None and full_mesh.num_faces > effective_target_faces:
+            active_mesh = clean_and_refine_mesh(
+                full_mesh,
+                min_component_faces=20,
+                repair_holes=False,
+                taubin_smoothing_iterations=1,
+                target_faces=effective_target_faces,
+            )
+            active_mesh.method = f"{mesh_method}_viewer_decimated"
+        else:
+            active_mesh = full_mesh
+
+        topo = analyze_mesh_topology(active_mesh)
         meshing_total_ms = (time.perf_counter() - t_mesh0) * 1000.0
 
-        # 8. Projective UV Mapping & Texture Atlas Assignment
+        # 8. Projective UV Mapping & Texture Assignment
         textured = apply_projective_texturing(
-            mesh=mesh,
+            mesh=active_mesh,
             rgb_uint8=prep.rgb_uint8,
             intrinsics=intrinsics,
             texture_max_dimension=texture_max_dimension,
@@ -257,6 +283,22 @@ class SingleViewPipeline:
             textured,
             out_dir / "scene.glb",
         )
+
+        glb_full_path: Optional[Path] = None
+        if export_both_presets and full_mesh.num_faces != active_mesh.num_faces:
+            textured_full = apply_projective_texturing(
+                mesh=full_mesh,
+                rgb_uint8=prep.rgb_uint8,
+                intrinsics=intrinsics,
+                texture_max_dimension=texture_max_dimension,
+            )
+            glb_full_path = export_mesh_glb(
+                textured_full,
+                out_dir / "scene_full.glb",
+            )
+        else:
+            glb_full_path = glb_path
+
         obj_path = export_mesh_obj(
             textured,
             out_dir / "scene.obj",
@@ -283,14 +325,28 @@ class SingleViewPipeline:
         pc_meta["density_stats"] = density_stats.to_dict()
 
         mesh_meta = textured.mesh.to_metadata_dict()
+        mesh_meta["quality_preset"] = quality_preset
+        mesh_meta["full_res_vertices"] = full_mesh.num_vertices
+        mesh_meta["full_res_faces"] = full_mesh.num_faces
         mesh_meta["topology"] = topo.to_dict()
 
-        export_availability = {
+        export_availability: Dict[str, Any] = {
             "glb": {
                 "filename": glb_path.name,
+                "preset": quality_preset,
                 "available": glb_path.exists(),
                 "size_bytes": int(glb_path.stat().st_size),
+                "size_mb": round(glb_path.stat().st_size / (1024.0 * 1024.0), 3),
                 "validation": glb_validation,
+            },
+            "glb_full": {
+                "filename": glb_full_path.name if glb_full_path else glb_path.name,
+                "preset": "full",
+                "available": bool(glb_full_path and glb_full_path.exists()),
+                "size_bytes": int(glb_full_path.stat().st_size) if glb_full_path else 0,
+                "size_mb": round(glb_full_path.stat().st_size / (1024.0 * 1024.0), 3)
+                if glb_full_path
+                else 0.0,
             },
             "obj": {
                 "filename": obj_path.name,
@@ -327,7 +383,7 @@ class SingleViewPipeline:
         report_data: Dict[str, Any] = {
             "run_id": run_id,
             "timestamp_utc": datetime.now(timezone.utc).isoformat(),
-            "pipeline_stage": "phase_5_full_single_view",
+            "pipeline_stage": "phase_5.5_hardened_single_view",
             "hardware": {
                 "platform": platform.platform(),
                 "python_version": platform.python_version(),
@@ -344,14 +400,15 @@ class SingleViewPipeline:
             "mesh": mesh_meta,
             "texturing": textured.to_metadata_dict(),
             "estimated_coverage": {
-                "frustum_mesh_coverage_pct": round(textured.frustum_coverage_pct, 2),
+                "view_frustum_coverage_pct": round(textured.view_frustum_coverage_pct, 2),
                 "cleaned_point_retention_pct": round(
                     float(clean_cloud.num_points) * 100.0 / float(raw_cloud.num_points), 2
                 ),
                 "definition": (
-                    "frustum_mesh_coverage_pct is the exact percentage of input camera image "
-                    "pixels (W x H) covered when rasterizing all valid reconstructed mesh "
-                    "triangles in projective UV space."
+                    "View-Frustum Coverage is the percentage of 2D input camera image pixels "
+                    "(W x H) covered when rasterizing all valid reconstructed mesh triangles "
+                    "in projective UV space. NOTE: It measures 2D view-frustum projection "
+                    "occupancy only and does NOT measure 3D scene completeness."
                 ),
             },
             "timings_ms": {
@@ -374,16 +431,19 @@ class SingleViewPipeline:
                 "point_cloud_ply": str(ply_path.name),
                 "mesh_ply": str(mesh_ply_path.name),
                 "scene_glb": str(glb_path.name),
+                "scene_full_glb": str(glb_full_path.name) if glb_full_path else str(glb_path.name),
                 "scene_obj": str(obj_path.name),
                 "mesh_stl": str(stl_path.name),
                 "ply_file_size_bytes": int(ply_path.stat().st_size),
                 "glb_file_size_bytes": int(glb_path.stat().st_size),
+                "glb_full_file_size_bytes": int(glb_full_path.stat().st_size)
+                if glb_full_path
+                else int(glb_path.stat().st_size),
             },
         }
 
         report_json_path = out_dir / "run_report.json"
         report_json_path.write_text(json.dumps(report_data, indent=2), encoding="utf-8")
-        # Also write under canonical name reconstruction_report.json & reconstruction_report.md
         (out_dir / "reconstruction_report.json").write_text(
             json.dumps(report_data, indent=2), encoding="utf-8"
         )
@@ -392,13 +452,14 @@ class SingleViewPipeline:
         report_md_path.write_text(md_text, encoding="utf-8")
 
         logger.info(
-            "Completed SingleViewPipeline run_id=%s in %.1f ms (Points=%d, Faces=%d, Coverage=%.1f%%, GLB=%d bytes)",
+            "Completed SingleViewPipeline run_id=%s in %.1f ms (Viewer Faces=%d [%.2f MB], Full Faces=%d [%.2f MB])",
             run_id,
             total_time_ms,
-            clean_cloud.num_points,
             textured.mesh.num_faces,
-            textured.frustum_coverage_pct,
-            glb_path.stat().st_size,
+            glb_path.stat().st_size / (1024.0 * 1024.0),
+            full_mesh.num_faces,
+            (glb_full_path.stat().st_size if glb_full_path else glb_path.stat().st_size)
+            / (1024.0 * 1024.0),
         )
 
         return SingleViewRunResult(
@@ -415,6 +476,7 @@ class SingleViewPipeline:
             depth_png_path=depth_png_path,
             ply_path=ply_path,
             glb_path=glb_path,
+            glb_full_path=glb_full_path,
             obj_path=obj_path,
             stl_path=stl_path,
             report_json_path=report_json_path,
@@ -424,5 +486,4 @@ class SingleViewPipeline:
         )
 
 
-# Alias for backward compatibility with Phase 1 imports
 SingleViewBaselinePipeline = SingleViewPipeline

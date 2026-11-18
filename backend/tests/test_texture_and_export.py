@@ -73,7 +73,7 @@ def test_projective_texturing_resolution_control_and_coverage() -> None:
     )
     assert tex_data.original_texture_size == (32, 24)
     assert tex_data.final_texture_size == (16, 12)
-    assert tex_data.frustum_coverage_pct == pytest.approx(100.0, abs=0.5)
+    assert tex_data.view_frustum_coverage_pct == pytest.approx(100.0, abs=0.5)
     assert tex_data.mesh.vertex_uvs is not None
     assert tex_data.mesh.vertex_uvs.shape == (mesh.num_vertices, 2)
 

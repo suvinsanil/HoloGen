@@ -349,8 +349,7 @@ def reconstruct_mesh_alpha_shape(
     dists = np.asarray(pcd.compute_nearest_neighbor_distance(), dtype=np.float64)
     mean_nn = max(float(np.mean(dists)), 1e-3)
     if alpha is None:
-        diag = float(np.linalg.norm(c_norm.extent))
-        alpha_val = max(mean_nn * 4.5, diag * 0.08)
+        alpha_val = max(mean_nn * 3.0, 0.05)
     else:
         alpha_val = float(alpha)
 

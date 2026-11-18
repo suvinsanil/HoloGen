@@ -1,4 +1,4 @@
-"""Projective camera UV mapping, texture resolution control, and frustum coverage computation."""
+"""Projective camera UV mapping, texture resolution control, and View-Frustum Coverage computation."""
 
 from dataclasses import dataclass
 import time
@@ -21,8 +21,13 @@ class TexturedMeshData:
     texture_image: np.ndarray  # uint8 (H_tex, W_tex, 3) RGB texture map
     original_texture_size: tuple[int, int]  # (W, H)
     final_texture_size: tuple[int, int]  # (W_tex, H_tex)
-    frustum_coverage_pct: float  # % of camera image area covered by projected mesh triangles
+    view_frustum_coverage_pct: float  # % of camera image area covered by projected mesh triangles
     texturing_time_ms: float
+
+    @property
+    def frustum_coverage_pct(self) -> float:
+        """Backward-compatible alias for view_frustum_coverage_pct."""
+        return self.view_frustum_coverage_pct
 
     @property
     def pil_texture(self) -> Image.Image:
@@ -38,10 +43,12 @@ class TexturedMeshData:
                 "width": self.final_texture_size[0],
                 "height": self.final_texture_size[1],
             },
-            "frustum_coverage_pct": round(self.frustum_coverage_pct, 2),
+            "view_frustum_coverage_pct": round(self.view_frustum_coverage_pct, 2),
             "coverage_definition": (
-                "Percentage of input camera frustum pixels (W x H) subtended by valid "
-                "reconstructed mesh triangles when rasterized in projective UV space."
+                "View-Frustum Coverage is the percentage of 2D input camera image pixels (W x H) "
+                "subtended by valid reconstructed mesh triangles when rasterized in projective UV space. "
+                "NOTE: It measures 2D view-frustum projection occupancy only and does NOT measure "
+                "3D scene completeness (occluded and back-facing surfaces are unobserved)."
             ),
             "texturing_time_ms": round(self.texturing_time_ms, 3),
         }
@@ -75,21 +82,18 @@ def compute_projective_uvs(
     return np.stack([s, t], axis=-1).astype(np.float32)
 
 
-def compute_frustum_uv_coverage_pct(
+def compute_view_frustum_coverage_pct(
     uvs: np.ndarray,
     faces: np.ndarray,
     width: int,
     height: int,
 ) -> float:
-    """Compute the exact percentage of the camera image plane covered by projected mesh triangles.
-
-    Rasterizes all mesh triangles in 2D image coordinates onto an (H, W) uint8 occupancy mask
-    and returns 100.0 * (occupied_pixels / (W * H)).
+    """Compute View-Frustum Coverage: the percentage of the 2D camera image plane covered by
+    projected mesh triangles. Does NOT measure 3D volumetric scene completeness.
     """
     if faces.shape[0] == 0 or uvs.shape[0] == 0 or width <= 0 or height <= 0:
         return 0.0
 
-    # Convert normalized (s, t) back to integer pixel coordinates (u_px, v_px)
     u_px = np.round(uvs[:, 0] * float(width - 1)).astype(np.int32)
     v_px = np.round((1.0 - uvs[:, 1]) * float(height - 1)).astype(np.int32)
     pts_2d = np.stack([u_px, v_px], axis=-1)
@@ -103,13 +107,17 @@ def compute_frustum_uv_coverage_pct(
     return float(covered) * 100.0 / float(width * height)
 
 
+# Backward-compatible alias
+compute_frustum_uv_coverage_pct = compute_view_frustum_coverage_pct
+
+
 def apply_projective_texturing(
     mesh: MeshData,
     rgb_uint8: np.ndarray,
     intrinsics: CameraIntrinsics,
     texture_max_dimension: Optional[int] = None,
 ) -> TexturedMeshData:
-    """Project the source RGB image onto a 3D mesh via pinhole camera projection and build texture atlas."""
+    """Project the source RGB image onto a 3D mesh via pinhole camera projection."""
     t0 = time.perf_counter()
     if mesh.num_vertices == 0 or mesh.num_faces == 0:
         raise GeometryProcessingError("Cannot texture an empty mesh.")
@@ -118,11 +126,8 @@ def apply_projective_texturing(
 
     orig_h, orig_w = int(rgb_uint8.shape[0]), int(rgb_uint8.shape[1])
 
-    # Always compute projective UVs from current 3D vertex positions so even smoothed/decimated/Poisson
-    # meshes receive accurate camera-projected texture coordinates.
     uvs = compute_projective_uvs(mesh.vertices, intrinsics)
 
-    # Resize texture image if texture_max_dimension is requested
     tex_img = rgb_uint8.copy()
     if texture_max_dimension is not None and texture_max_dimension >= 8:
         max_side = max(orig_w, orig_h)
@@ -137,14 +142,13 @@ def apply_projective_texturing(
 
     final_h, final_w = int(tex_img.shape[0]), int(tex_img.shape[1])
 
-    # Also sample vertex colors directly from the texture at (s, t) so vertex-colored exports (PLY) match
     sample_u = np.clip(np.round(uvs[:, 0] * float(final_w - 1)).astype(np.int32), 0, final_w - 1)
     sample_v = np.clip(
         np.round((1.0 - uvs[:, 1]) * float(final_h - 1)).astype(np.int32), 0, final_h - 1
     )
     sampled_colors = tex_img[sample_v, sample_u].astype(np.float32) / 255.0
 
-    coverage_pct = compute_frustum_uv_coverage_pct(
+    coverage_pct = compute_view_frustum_coverage_pct(
         uvs=uvs,
         faces=mesh.faces,
         width=intrinsics.width,
@@ -168,6 +172,6 @@ def apply_projective_texturing(
         texture_image=tex_img,
         original_texture_size=(orig_w, orig_h),
         final_texture_size=(final_w, final_h),
-        frustum_coverage_pct=coverage_pct,
+        view_frustum_coverage_pct=coverage_pct,
         texturing_time_ms=elapsed_ms,
     )

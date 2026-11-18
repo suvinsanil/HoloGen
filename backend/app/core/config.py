@@ -63,8 +63,13 @@ class HoloGenSettings(BaseSettings):
     default_fov_deg: float = Field(default=60.0, gt=5.0, lt=175.0)
     default_sensor_width_mm: float = Field(default=36.0, gt=1.0)
 
-    # Depth Estimation defaults
+    # Depth Estimation & Meshing defaults
     default_depth_model: str = Field(default="depth_anything_v2_small")
+    default_refinement_method: Literal["none", "bilateral", "guided", "guided_bilateral"] = Field(
+        default="none"
+    )
+    default_quality_preset: Literal["viewer", "full"] = Field(default="viewer")
+    viewer_target_faces: int = Field(default=120000, ge=5000, le=500000)
     relative_near_depth: float = Field(default=1.0, gt=0.05)
     relative_far_depth: float = Field(default=10.0, gt=0.5)
 

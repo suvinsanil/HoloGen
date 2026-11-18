@@ -109,10 +109,11 @@ $$
 s_i = \text{clip}\left(\frac{u_i}{W - 1}, 0, 1\right), \quad t_i = \text{clip}\left(1.0 - \frac{v_i}{H - 1}, 0, 1\right)
 $$
 
-### 7.2 Estimated Coverage Definition
+### 7.2 View-Frustum Coverage Definition
 HoloGen computes and reports two distinct, reproducible coverage metrics:
-1. **Frustum Mesh Coverage (`frustum_mesh_coverage_pct`):** All reconstructed mesh triangles are rasterized in 2D image coordinates $(u, v)$ onto an $H \times W$ binary occupancy canvas $\mathcal{M}$. The frustum coverage is defined as:
-   $$\text{Coverage}_{\text{frustum}} = 100 \times \frac{1}{W \cdot H} \sum_{v=0}^{H-1} \sum_{u=0}^{W-1} \mathbb{I}[\mathcal{M}(v, u) > 0]$$
+1. **View-Frustum Coverage (`view_frustum_coverage_pct`):** All reconstructed mesh triangles are rasterized in 2D image coordinates $(u, v)$ onto an $H \times W$ binary occupancy canvas $\mathcal{M}$. The View-Frustum Coverage is defined as:
+   $$\text{Coverage}_{\text{view-frustum}} = 100 \times \frac{1}{W \cdot H} \sum_{v=0}^{H-1} \sum_{u=0}^{W-1} \mathbb{I}[\mathcal{M}(v, u) > 0]$$
+   *Important Note:* View-Frustum Coverage measures 2D camera-plane projection occupancy only; it **does not** measure 3D volumetric scene completeness (occluded and back-facing surfaces are unobserved from a single viewpoint).
 2. **Cleaned Point Retention (`cleaned_point_retention_pct`):** The percentage of raw back-projected points surviving Statistical Outlier Removal and Normal Grazing-Angle Filtering.
 
 ### 7.3 Coordinate Frame Convention for glTF / GLB Export

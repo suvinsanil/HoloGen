@@ -1,4 +1,4 @@
-"""CLI entry point for Phase 1 baseline single-view reconstruction."""
+"""CLI entry point for single-view 3D reconstruction (supports viewer and full-res presets)."""
 
 import argparse
 import json
@@ -12,14 +12,14 @@ if str(BACKEND_DIR) not in sys.path:
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.pipelines.single_view import SingleViewBaselinePipeline
+from app.pipelines.single_view import SingleViewPipeline
 
 logger = get_logger("scripts.run_baseline")
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="HoloGen Phase 1 Baseline: Single-view image -> depth -> colored PLY point cloud."
+        description="HoloGen Single-View Reconstruction CLI."
     )
     parser.add_argument(
         "--image",
@@ -52,6 +52,26 @@ def parse_args() -> argparse.Namespace:
         help="Explicit focal length override in pixels.",
     )
     parser.add_argument(
+        "--preset",
+        type=str,
+        choices=["viewer", "full"],
+        default="viewer",
+        help="Mesh quality preset: 'viewer' (~120k faces, GLB < 5MB) or 'full' (default: viewer).",
+    )
+    parser.add_argument(
+        "--target-faces",
+        type=int,
+        default=120000,
+        help="Target triangle face count for the 'viewer' preset (default: 120000).",
+    )
+    parser.add_argument(
+        "--refinement",
+        type=str,
+        choices=["none", "bilateral", "guided", "guided_bilateral"],
+        default="none",
+        help="Depth refinement filter (default: none, per Experiment A findings).",
+    )
+    parser.add_argument(
         "--device",
         type=str,
         choices=["auto", "cuda", "cpu"],
@@ -66,7 +86,7 @@ def main() -> int:
     settings = get_settings()
     settings.device_preference = args.device
 
-    pipeline = SingleViewBaselinePipeline(settings=settings)
+    pipeline = SingleViewPipeline(settings=settings)
 
     if args.image is not None:
         image_paths = [Path(args.image)]
@@ -84,7 +104,7 @@ def main() -> int:
             return 1
 
     summaries = []
-    for idx, img_path in enumerate(image_paths):
+    for img_path in image_paths:
         run_id = args.run_id if (args.run_id and len(image_paths) == 1) else f"baseline_{img_path.stem}"
         result = pipeline.run(
             image_input=img_path,
@@ -92,16 +112,32 @@ def main() -> int:
             max_dimension=args.max_dim,
             fov_deg=args.fov,
             focal_length_px=args.focal_px,
+            refinement_method=args.refinement,
+            quality_preset=args.preset,
+            viewer_target_faces=args.target_faces,
+            export_both_presets=True,
         )
+        exports = result.report_data["export_availability"]
+        mesh_info = result.report_data["mesh"]
         summaries.append(
             {
                 "run_id": result.run_id,
                 "image": img_path.name,
                 "processed_size": f"{result.preprocessing.width}x{result.preprocessing.height}",
                 "device": result.depth_prediction.device,
+                "refinement": args.refinement,
                 "inference_ms": round(result.depth_prediction.inference_time_ms, 2),
-                "total_ms": round(result.total_time_ms, 2),
                 "num_points": result.point_cloud.num_points,
+                "viewer_vertices": mesh_info["num_vertices"],
+                "viewer_faces": mesh_info["num_faces"],
+                "viewer_glb_mb": exports["glb"]["size_mb"],
+                "full_vertices": mesh_info["full_res_vertices"],
+                "full_faces": mesh_info["full_res_faces"],
+                "full_glb_mb": exports["glb_full"]["size_mb"],
+                "view_frustum_coverage_pct": result.report_data["estimated_coverage"][
+                    "view_frustum_coverage_pct"
+                ],
+                "total_ms": round(result.total_time_ms, 2),
                 "output_dir": str(result.output_dir),
             }
         )
