@@ -77,3 +77,19 @@ Monocular depth networks do not output calibrated epistemic or aleatoric probabi
 | **Voxel Downsampling** | `voxel_size` | $0.035$ | Aggregates points and RGB colors within cubic 3D grid cells of edge length `voxel_size`. |
 | **Normal Grazing-Angle Filter** | `max_grazing_angle_deg` | $80.0^\circ$ | Removes monocular depth-cliff veil points where $\arccos(\mathbf{n}_i \cdot \hat{\mathbf{v}}_i) > \theta_{\max}$. |
 | **Tangent-Plane Smoothing** | `alpha`, `k_neighbors` | $0.35$, $9$ | Damps high-frequency depth jitter along surface normal direction $\mathbf{p}_i \leftarrow \mathbf{p}_i + \alpha ((\bar{\mathbf{p}}_i - \mathbf{p}_i)\cdot \mathbf{n}_i)\mathbf{n}_i$. |
+
+
+---
+
+## 6. Surface Mesh Reconstruction & Cleanup (Phase 4)
+
+### 6.1 Depth-Grid Triangulation with Discontinuity Edge Cutting (Baseline)
+Given the 2D depth grid $D(u, v)$ of shape $(H, W)$, each $2 \times 2$ pixel quad $(u, v), (u+1, v), (u, v+1), (u+1, v+1)$ is split into two candidate counter-clockwise triangles:
+$$T_1 = (p_{00}, p_{01}, p_{10}), \quad T_2 = (p_{10}, p_{01}, p_{11})$$
+To prevent stretched "curtain" triangles across occlusion cliffs, any triangle containing an edge $(a, b)$ whose relative depth jump exceeds $\tau_{\text{jump}}$ (default $8\%$) is cut:
+$$\frac{|Z_a - Z_b|}{\min(Z_a, Z_b)} > \tau_{\text{jump}}$$
+
+### 6.2 Open3D Comparison Surface Reconstruction Methods
+1. **Screened Poisson Reconstruction (`octree_depth=8`):** Solves a global indicator function $\nabla \cdot \nabla \chi = \nabla \cdot \mathbf{V}$ over an adaptive octree. Because Poisson enforces a closed watertight surface, applying it to a single-view 2.5D frustum cloud invents a large hallucinated back-side bubble unless vertices with low sampling density $w_i < Q_q(w)$ are trimmed (`density_quantile_trim = 0.08`).
+2. **Ball Pivoting Algorithm (BPA):** Rolls virtual balls of radii $r \in \{1.5, 2.5, 4.0\} \bar{d}_{\text{nn}}$ across the point cloud; preserves exact input points with zero hallucination (`surface_noise_rms = 0.0227`), at the cost of leaving small unbridged interior holes where sampling density fluctuates.
+3. **3D Alpha Shapes:** Extracts the boundary of the $\alpha$-complex of the 3D Delaunay tetrahedrization (with $2 \times 10^{-3} \bar{d}_{\text{nn}}$ general-position perturbation to prevent Qhull coplanar lattice degeneracy).
