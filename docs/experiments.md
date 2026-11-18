@@ -221,3 +221,48 @@ Runtime breakdown (feature extraction / matching / mapping, s): Fountain-8 1.8 /
 | **ETH3D `pipes` (14 views)** *(GT)* | 14 / 14 / 0 / 0 | 0.0511 | **0.0519** [0.0162–0.1271] | **0.9524** [0.7200–1.000] | **1,961.3** (SfM 1961.3 / Fusion 807.0) | 62.42 |
 
 - **Consistency Threshold Policy:** The small Fountain sweep in `outputs/phase_7c/phase_7c_results.json` (`strict` 270.7k faces vs. `default` 352.8k vs. `relaxed` 442.2k) is reported only to verify pixel-rejection sensitivity. **Consistency thresholds are NOT selected by point or face count.** In Experiment D (Phase 7e), thresholds are tuned on Fountain and evaluated out-of-sample on ETH3D `pipes` by precision and F-score against the laser scan.
+
+---
+
+## 8. Phase 7e — Experiment D: Single-View vs. Sparse SfM vs. Multi-View TSDF Fusion
+- **Script:** `scripts/run_experiment_d.py` -> `outputs/experiment_d/experiment_d_results.json`, `outputs/experiment_d/experiment_d_scaling_curves.png`
+- **Commit at run time:** `f21a8b2` (`phase-7d`) | **Hardware:** i5-1135G7, 7.7 GB RAM, GeForce MX330 2 GB VRAM, Windows 11
+- **Protocol:**
+  1. **Consistency Threshold Tuning (on Fountain 10 views, by Precision & F-score at $\tau=0.05\text{ m}$):**
+     - `strict` (`rel_depth <= 0.05, rgb <= 0.12`): Prec `0.6926`, F1 `0.7664`, Chamfer `0.1132 m`
+     - **`default` (`rel_depth <= 0.10, rgb <= 0.18`)**: Prec **`0.7036`**, F1 **`0.7861`**, Chamfer **`0.0588 m`** *(selected, evaluated out-of-sample on ETH3D `pipes`)*
+     - `relaxed` (`rel_depth <= 0.20, rgb <= 0.30`): Prec `0.5185`, F1 `0.6594`, Chamfer `0.1904 m`
+  2. **Multi-View Alignment:** `Sim(3)` Umeyama on recovered camera centres $\to$ GT/reference camera centres, evaluated **without ICP** and **with ICP**.
+  3. **Single-View Fair Protocol (`N=1`):** Camera-frame inverse-depth scale+shift fit (`1/Z = s * d_mono + t`) against visible GT/reference scan points in the camera frustum, transformed to world coordinates via GT/reference `(R_w2c, t_w2c)` (evaluated without and with ICP).
+  4. **Bounding-Region Completeness:** Recall is computed **only** on GT/reference points inside the reconstruction's axis-aligned bounding box (`+0.05 m` margin) so unobserved parts of the room do not penalize partial-view reconstructions.
+
+### 8.1 Fountain (Reference Geometry: RGB-D `integrated.ply`, *not ground truth*, $\tau \in \{0.02\text{ m}, 0.05\text{ m}\}$)
+| Method | Views (Reg/In) | Chamfer (m, No ICP / ICP) | Prec / Rec / F1 @ `0.02 m` (No ICP) | Prec / Rec / F1 @ `0.05 m` (No ICP) | Prec / Rec / F1 @ `0.05 m` (With ICP) | Runtime (s) | Peak RSS (MB) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Single-View Aligned (`N=1`) | 1 / 1 | **0.0323** / **0.0175** | 0.368 / 0.305 / 0.334 | 0.865 / 0.739 / **0.797** | 0.971 / 0.854 / **0.909** | 1.87 | — |
+| Multi-View TSDF (`N=3`) | 3 / 3 | 0.0791 / 0.0348 | 0.155 / 0.143 / 0.149 | 0.397 / 0.371 / 0.383 | 0.855 / 0.687 / 0.762 | 5.35 | 538.0 |
+| Multi-View TSDF (`N=5`) | 5 / 5 | 0.0634 / 0.0511 | 0.320 / 0.354 / 0.336 | 0.585 / 0.706 / 0.640 | 0.707 / 0.790 / 0.746 | 9.85 | 617.7 |
+| Multi-View TSDF (`N=10`) | 10 / 10 | 0.1474 / 0.1384 | 0.399 / 0.560 / 0.466 | 0.608 / 0.882 / 0.720 | 0.633 / 0.916 / 0.748 | 21.82 | 633.4 |
+| Multi-View TSDF (`N=33`, all) | 33 / 33 | 0.9193 / 0.9168 | 0.115 / 0.552 / 0.191 | 0.198 / **0.914** / 0.326 | 0.222 / **0.926** / 0.358 | 124.37 | 834.1 |
+| SfM Sparse Cloud Only (`N=33`) | 33 / 33 | 0.0690 / 0.0690 | **0.703 / 0.622 / 0.660** | **0.735** / 0.903 / **0.811** | 0.737 / 0.905 / 0.812 | — | — |
+
+### 8.2 ETH3D `pipes` (Ground Truth: Faro Laser Scan `scan1.ply`, $\tau \in \{0.05\text{ m}, 0.10\text{ m}\}$)
+| Method | Views (Reg/In) | Chamfer (m, No ICP / ICP) | Prec / Rec / F1 @ `0.05 m` (No ICP) | Prec / Rec / F1 @ `0.10 m` (No ICP) | Prec / Rec / F1 @ `0.10 m` (With ICP) | Runtime (s) | Peak RSS (MB) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Single-View Aligned (`N=1`) | 1 / 1 | **0.0663** / **0.0528** | **0.514 / 0.541 / 0.527** | **0.804 / 0.813 / 0.808** | **0.870 / 0.875 / 0.873** | 2.01 | — |
+| Multi-View TSDF (`N=3`) | 3 / 3 | 0.1310 / 0.0646 | 0.194 / 0.275 / 0.227 | 0.480 / 0.528 / 0.503 | 0.870 / 0.794 / 0.830 | 8.24 | 1,668.9 |
+| Multi-View TSDF (`N=5`) | 5 / 5 | 0.1217 / 0.0908 | 0.248 / 0.323 / 0.280 | 0.551 / 0.572 / 0.561 | 0.786 / 0.711 / 0.747 | 15.67 | 2,106.6 |
+| Multi-View TSDF (`N=10`) | 4 / 10 | 0.1059 / 0.0857 | 0.276 / 0.329 / 0.300 | 0.621 / 0.614 / 0.618 | 0.810 / 0.707 / 0.755 | 38.38 | 2,050.0 |
+| Multi-View TSDF (`N=14`, all) | 14 / 14 | 0.2983 / 0.2832 | 0.098 / 0.152 / 0.120 | 0.269 / 0.409 / 0.325 | 0.402 / 0.555 / 0.466 | 39.81 | 2,040.6 |
+| SfM Sparse Cloud Only (`N=14`) | 14 / 14 | 0.7497 / 0.6684 | 0.088 / 0.004 / 0.007 | 0.323 / 0.027 / 0.050 | 0.865 / 0.072 / 0.133 | — | — |
+
+### 8.3 Per-View GT Depth Evaluation on ETH3D `pipes` (`14/14` views vs. Faro scan `scan1.ply`)
+- **Single-View Depth (median-scaled to GT per view):** Median `Abs Rel = 0.1972`, Median `RMSE = 1.1293 m`
+- **Multi-View SfM-Aligned Depth (`1/Z = s*d + t` scaled via `Sim(3)`):** Median `Abs Rel = 0.0972` (**2.03× lower**), Median `RMSE = 0.2751 m` (**4.11× lower**)
+
+### 8.4 Custom Scene (`datasets/custom_scene_01/`) & Honest Mixed/Negative Findings
+- **`datasets/custom_scene_01/`:** Not present in workspace (`status: not_present_in_workspace`).
+- **Honest Mixed/Negative Findings:**
+  1. **Background drift at full-scene view counts (`N=33` Fountain, `N=14` ETH3D):** While SfM sparse-aligned depth halves per-view `Abs Rel` (`0.1972 -> 0.0972`) and raises Fountain recall to `91.4%`, TSDF precision drops sharply at `N=33` (`0.198`) and `N=14` (`0.269`) because `min_consistent_views=1` allows distant background pixels (beyond the foreground reference mesh/scan) to survive when only one neighbor view agrees, inflating `accuracy_mean_m` to `1.815 m` on Fountain and `0.442 m` on ETH3D.
+  2. **Single-view (`N=1`) vs. Multi-view (`N=3..14`) F-score:** `N=1` achieves `0.808` F1 (`0.10 m`) on ETH3D because it is aligned directly in-frame against dense visible GT scan pixels and covers only one clean frustum, whereas `Sim(3)`-aligned multi-view fusion integrates across wide-baseline views where `0.6–0.8 px` SfM reprojection and unmasked background tails degrade precision.
+  3. **Partial registration on `pipes_N10` (`4/10`):** `DSC_0634..0643` spans a wide viewpoint jump with sparse overlap across intermediate frames (`0637..0642`), so only `4/10` views registered cleanly.
