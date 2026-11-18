@@ -27,3 +27,19 @@ class GeometryProcessingError(HoloGenError):
 
 class ExportError(HoloGenError):
     """Raised when saving 3D assets or reports fails."""
+
+
+class JobCancelledError(HoloGenError, RuntimeError):
+    """Raised when a reconstruction job is cancelled by the user."""
+
+
+class JobTimeoutError(HoloGenError, RuntimeError):
+    """Raised when a reconstruction job exceeds its hard wall-clock timeout."""
+
+
+class QueueFullError(HoloGenError):
+    """Raised when the reconstruction queue depth limit has been reached."""
+
+
+class DuplicateJobError(HoloGenError):
+    """Raised when a reconstruction job is already active or queued."""

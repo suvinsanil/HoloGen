@@ -4,8 +4,9 @@ from contextlib import asynccontextmanager
 import os
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import get_db, get_job_queue, router
@@ -44,6 +45,64 @@ LOCALHOST_CORS_ORIGINS = [
     "http://localhost:8000",
     "http://127.0.0.1:8000",
 ]
+
+ALLOWED_LOCAL_HOSTS = {
+    "localhost",
+    "127.0.0.1",
+    "[::1]",
+    "testserver",
+}
+
+
+@app.middleware("http")
+async def local_origin_and_host_guard(request: Request, call_next):
+    """Prevent DNS rebinding and cross-origin state-changing attacks against the local API."""
+    # 1. DNS Rebinding check: Host header must target localhost/127.0.0.1/[::1]/testserver
+    raw_host = request.headers.get("host", "")
+    host = raw_host.split(":")[0].strip().lower()
+    if host and host not in ALLOWED_LOCAL_HOSTS:
+        return JSONResponse(
+            status_code=403,
+            content={"detail": f"Forbidden: DNS rebinding protection rejected external host '{raw_host}'."},
+        )
+
+    # 2. Cross-origin state-changing protection for POST/PUT/DELETE/PATCH
+    if request.method in ("POST", "PUT", "DELETE", "PATCH"):
+        origin = request.headers.get("origin")
+        if origin:
+            origin_clean = origin.strip().rstrip("/")
+            allowed = any(
+                origin_clean == loc.rstrip("/")
+                or origin_clean.startswith(("http://localhost:", "http://127.0.0.1:", "http://[::1]:"))
+                or origin_clean in ("http://testserver", "https://testserver")
+                for loc in LOCALHOST_CORS_ORIGINS
+            )
+            if not allowed:
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": f"Forbidden: Cross-origin request from external origin '{origin}' is not permitted."},
+                )
+
+        referer = request.headers.get("referer")
+        if referer and not origin:
+            is_local_ref = any(
+                referer.startswith(prefix)
+                for prefix in (
+                    "http://localhost",
+                    "http://127.0.0.1",
+                    "http://[::1]",
+                    "http://testserver",
+                    "https://testserver",
+                )
+            )
+            if not is_local_ref:
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "Forbidden: Cross-origin request from external referer is not permitted."},
+                )
+
+    return await call_next(request)
+
 
 app.add_middleware(
     CORSMiddleware,

@@ -6,12 +6,14 @@ import json
 from pathlib import Path
 import platform
 import time
-from typing import Any, Dict, Literal, Optional, Union
+import threading
+from typing import Any, Callable, Dict, Literal, Optional, Union
 
 from PIL import Image
 import torch
 
 from app.core.config import HoloGenSettings, get_settings
+from app.core.exceptions import JobCancelledError, JobTimeoutError
 from app.core.logging import get_logger
 from app.geometry.export import (
     export_mesh_glb,
@@ -74,6 +76,13 @@ class SingleViewRunResult:
     report_data: Dict[str, Any]
 
 
+def _check_abort(cancel_event: Optional[threading.Event], deadline: Optional[float]) -> None:
+    if cancel_event is not None and cancel_event.is_set():
+        raise JobCancelledError("Reconstruction cancelled by user.")
+    if deadline is not None and time.monotonic() > deadline:
+        raise JobTimeoutError("Reconstruction exceeded hard job timeout.")
+
+
 class SingleViewPipeline:
     """End-to-end single-view 3D reconstruction pipeline (Phases 1-5.5)."""
 
@@ -107,9 +116,14 @@ class SingleViewPipeline:
         target_faces: Optional[int] = None,
         texture_max_dimension: Optional[int] = None,
         output_base_dir: Optional[Path] = None,
+        timeout_seconds: float = 300.0,
+        cancel_event: Optional[threading.Event] = None,
     ) -> SingleViewRunResult:
         """Execute full single-view 3D reconstruction and write all assets + reports."""
         t_start = time.perf_counter()
+        deadline = time.monotonic() + float(timeout_seconds) if timeout_seconds > 0 else None
+        _check_abort(cancel_event, deadline)
+
         if run_id is None:
             ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
             stem = Path(image_input).stem if isinstance(image_input, (str, Path)) else "image"
@@ -137,6 +151,7 @@ class SingleViewPipeline:
         )
         preprocessed_png_path = out_dir / "input_preprocessed.png"
         Image.fromarray(prep.rgb_uint8, mode="RGB").save(preprocessed_png_path)
+        _check_abort(cancel_event, deadline)
 
         # 2. Camera Intrinsics Estimation
         intrinsics = estimate_intrinsics(
@@ -151,6 +166,7 @@ class SingleViewPipeline:
         # 3. Monocular Depth Estimation
         self.depth_model.load()
         depth_pred = self.depth_model.predict(prep.rgb_uint8)
+        _check_abort(cancel_event, deadline)
 
         # 4. Edge-Preserving Depth Refinement (defaults to "none" per Experiment A findings)
         depth_ref = refine_depth_map(
@@ -165,6 +181,7 @@ class SingleViewPipeline:
             depth_map=depth_ref.refined_depth,
             uncertainty_threshold=uncertainty_threshold,
         )
+        _check_abort(cancel_event, deadline)
 
         # 6. Back-Projection & Point Cloud Cleaning + Oriented Normals
         raw_cloud = backproject_depth_to_point_cloud(
@@ -181,6 +198,7 @@ class SingleViewPipeline:
         clean_cloud = graz_res.cloud
         density_stats = compute_point_cloud_density_stats(clean_cloud)
         clean_time_ms = (time.perf_counter() - t_clean0) * 1000.0
+        _check_abort(cancel_event, deadline)
 
         # 7. Surface Mesh Reconstruction & Cleanup (Full Resolution + Viewer Decimation Preset)
         t_mesh0 = time.perf_counter()
@@ -250,6 +268,7 @@ class SingleViewPipeline:
 
         topo = analyze_mesh_topology(active_mesh)
         meshing_total_ms = (time.perf_counter() - t_mesh0) * 1000.0
+        _check_abort(cancel_event, deadline)
 
         # 8. Projective UV Mapping & Texture Assignment
         textured = apply_projective_texturing(
@@ -258,6 +277,7 @@ class SingleViewPipeline:
             intrinsics=intrinsics,
             texture_max_dimension=texture_max_dimension,
         )
+        _check_abort(cancel_event, deadline)
 
         # 9. Multi-Format Asset Export & Independent GLB Validation
         t_export_start = time.perf_counter()

@@ -5,6 +5,7 @@ import io
 import json
 from pathlib import Path
 import re
+import shutil
 from typing import List, Literal, Optional
 import uuid
 
@@ -16,6 +17,7 @@ from PIL import Image, ImageOps
 import torch
 
 from app.core.config import get_settings
+from app.core.exceptions import DuplicateJobError, QueueFullError
 from app.core.logging import get_logger
 from app.geometry.export import save_depth_visualization_png
 from app.schemas.reconstruction import (
@@ -34,7 +36,8 @@ from app.vision.preprocessing import preprocess_image
 
 logger = get_logger("api.routes")
 
-MAX_UPLOAD_BYTES = 15 * 1024 * 1024  # 15 MB strict upload limit
+MAX_UPLOAD_BYTES = 15 * 1024 * 1024  # 15 MB strict single image upload limit
+MAX_MULTI_UPLOAD_TOTAL_BYTES = 100 * 1024 * 1024  # 100 MB aggregate batch limit for multi-view
 MAX_RAW_DIMENSION = 4096  # 4096x4096 max raw pixel dimension guard
 MAX_QUEUE_DEPTH = 10  # Cap pending queue depth to prevent resource exhaustion
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
@@ -236,28 +239,32 @@ async def upload_image(
         display_name = project_id
 
     out_dir = settings.outputs_dir / project_id
-    out_dir.mkdir(parents=True, exist_ok=True)
-    src_path = out_dir / f"input_original{ext}"
-    src_path.write_bytes(raw_bytes)
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        src_path = out_dir / f"input_original{ext}"
+        src_path.write_bytes(raw_bytes)
 
-    prep = preprocess_image(src_path, max_dimension=settings.max_image_dimension)
-    Image.fromarray(prep.rgb_uint8, mode="RGB").save(out_dir / "input_preprocessed.png")
+        prep = preprocess_image(src_path, max_dimension=settings.max_image_dimension)
+        Image.fromarray(prep.rgb_uint8, mode="RGB").save(out_dir / "input_preprocessed.png")
 
-    initial_report = {
-        "run_id": project_id,
-        "preprocessing": prep.to_dict(),
-    }
+        initial_report = {
+            "run_id": project_id,
+            "preprocessing": prep.to_dict(),
+        }
 
-    db = get_db()
-    rec = db.create_project(
-        project_id=project_id,
-        name=display_name,
-        source_image_path=src_path,
-        output_dir=out_dir,
-        mode=mode if mode in ("single_view", "multi_view") else "single_view",
-        initial_report=initial_report,
-    )
-    return _record_to_status_response(rec)
+        db = get_db()
+        rec = db.create_project(
+            project_id=project_id,
+            name=display_name,
+            source_image_path=src_path,
+            output_dir=out_dir,
+            mode=mode if mode in ("single_view", "multi_view") else "single_view",
+            initial_report=initial_report,
+        )
+        return _record_to_status_response(rec)
+    except Exception:
+        shutil.rmtree(out_dir, ignore_errors=True)
+        raise
 
 
 @router.post("/upload-multi", response_model=ProjectStatusResponse)
@@ -279,34 +286,48 @@ async def upload_multi_images(
     validate_project_id(project_id)
 
     out_dir = settings.outputs_dir / project_id
-    inputs_dir = out_dir / "inputs"
-    inputs_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        inputs_dir = out_dir / "inputs"
+        inputs_dir.mkdir(parents=True, exist_ok=True)
 
-    saved_paths: List[Path] = []
-    for idx, f in enumerate(files):
-        raw_bytes, ext, _ = await _validate_and_read_image(f)
-        dst = inputs_dir / f"view_{idx:03d}{ext}"
-        dst.write_bytes(raw_bytes)
-        saved_paths.append(dst)
+        saved_paths: List[Path] = []
+        total_bytes = 0
+        for idx, f in enumerate(files):
+            raw_bytes, ext, _ = await _validate_and_read_image(f)
+            total_bytes += len(raw_bytes)
+            if total_bytes > MAX_MULTI_UPLOAD_TOTAL_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail=(
+                        f"Aggregate multi-view upload exceeds maximum size of "
+                        f"{MAX_MULTI_UPLOAD_TOTAL_BYTES // (1024 * 1024)} MB."
+                    ),
+                )
+            dst = inputs_dir / f"view_{idx:03d}{ext}"
+            dst.write_bytes(raw_bytes)
+            saved_paths.append(dst)
 
-    # Preview thumbnail from first view
-    prep = preprocess_image(saved_paths[0], max_dimension=settings.max_image_dimension)
-    Image.fromarray(prep.rgb_uint8, mode="RGB").save(out_dir / "input_preprocessed.png")
+        # Preview thumbnail from first view
+        prep = preprocess_image(saved_paths[0], max_dimension=settings.max_image_dimension)
+        Image.fromarray(prep.rgb_uint8, mode="RGB").save(out_dir / "input_preprocessed.png")
 
-    display_name = re.sub(r"[^a-zA-Z0-9_\-\s]", "", (name or f"MultiView ({len(saved_paths)} views)")).strip()[:48]
-    if not display_name:
-        display_name = project_id
+        display_name = re.sub(r"[^a-zA-Z0-9_\-\s]", "", (name or f"MultiView ({len(saved_paths)} views)")).strip()[:48]
+        if not display_name:
+            display_name = project_id
 
-    db = get_db()
-    rec = db.create_project(
-        project_id=project_id,
-        name=display_name,
-        source_image_path=saved_paths[0],
-        output_dir=out_dir,
-        mode="multi_view",
-        initial_report={"run_id": project_id, "num_input_images": len(saved_paths)},
-    )
-    return _record_to_status_response(rec)
+        db = get_db()
+        rec = db.create_project(
+            project_id=project_id,
+            name=display_name,
+            source_image_path=saved_paths[0],
+            output_dir=out_dir,
+            mode="multi_view",
+            initial_report={"run_id": project_id, "num_input_images": len(saved_paths)},
+        )
+        return _record_to_status_response(rec)
+    except Exception:
+        shutil.rmtree(out_dir, ignore_errors=True)
+        raise
 
 
 @router.post("/cancel/{project_id}", response_model=ProjectStatusResponse)
@@ -336,21 +357,17 @@ def start_reconstruction(
         raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found.")
 
     q = get_job_queue()
-    if q.is_active_or_queued(project_id):
-        raise HTTPException(
-            status_code=409,
-            detail=f"Project '{project_id}' is already queued or running.",
+    try:
+        q.enqueue(
+            project_id=project_id,
+            params=request,
+            wait_for_completion=request.run_synchronously,
         )
-    if q.queue_depth() >= MAX_QUEUE_DEPTH:
-        raise HTTPException(
-            status_code=429,
-            detail=f"Reconstruction queue is full (max {MAX_QUEUE_DEPTH} pending jobs). Try again later.",
-        )
-    q.enqueue(
-        project_id=project_id,
-        params=request,
-        wait_for_completion=request.run_synchronously,
-    )
+    except DuplicateJobError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except QueueFullError as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+
     updated = db.get_project(project_id)
     assert updated is not None
     return _record_to_status_response(updated)
@@ -427,6 +444,11 @@ def get_viewer_point_cloud_json(project_id: str) -> FileResponse:
     rec = db.get_project(project_id)
     if rec is None:
         raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found.")
+    if rec.status != "completed":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Project '{project_id}' is not completed (current status: {rec.status}).",
+        )
 
     out_dir = Path(rec.output_dir)
     json_path = out_dir / "viewer_cloud.json"
@@ -502,6 +524,11 @@ def download_export_asset(project_id: str, format_key: str) -> FileResponse:
         )
 
     fname, media_type, download_name = file_mapping[format_key]
+    if format_key in ("glb", "glb_full", "obj", "ply", "mesh_ply", "stl") and rec.status != "completed":
+        raise HTTPException(
+            status_code=409,
+            detail=f"3D asset '{format_key}' is not available because project '{project_id}' is not completed (status: {rec.status}).",
+        )
     target_path = out_dir / fname
     if not target_path.exists() and format_key == "glb_full":
         target_path = out_dir / "scene.glb"

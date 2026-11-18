@@ -1,5 +1,6 @@
 """Concurrency-1 reconstruction job queue with granular stage status reporting."""
 
+import gc
 import json
 from pathlib import Path
 import queue
@@ -8,10 +9,17 @@ import traceback
 from typing import Any, Dict, List, Optional
 
 import numpy as np
+import torch
 
 from app.core.config import get_settings
+from app.core.exceptions import (
+    DuplicateJobError,
+    JobCancelledError,
+    JobTimeoutError,
+    QueueFullError,
+)
 from app.core.logging import get_logger
-from app.pipelines.multi_view import JobCancelledError, JobTimeoutError, MultiViewPipeline
+from app.pipelines.multi_view import MultiViewPipeline
 from app.pipelines.single_view import SingleViewPipeline
 from app.schemas.reconstruction import ReconstructRequest
 from app.services.database import DatabaseManager
@@ -87,8 +95,9 @@ def export_viewer_point_cloud_json(
 class ReconstructionJobQueue:
     """Single-worker (concurrency = 1) job queue protecting 2GB VRAM and 7.7GB RAM."""
 
-    def __init__(self, db: DatabaseManager) -> None:
+    def __init__(self, db: DatabaseManager, max_queue_depth: int = 10) -> None:
         self.db = db
+        self.max_queue_depth = max_queue_depth
         self._queue: "queue.Queue[tuple[str, ReconstructRequest, Optional[threading.Event]]]" = (
             queue.Queue()
         )
@@ -136,18 +145,20 @@ class ReconstructionJobQueue:
         params: ReconstructRequest,
         wait_for_completion: bool = False,
     ) -> int:
-        """Enqueue a reconstruction job and optionally wait for completion."""
+        """Enqueue a reconstruction job and optionally wait for completion with atomic admission."""
         done_event = threading.Event() if wait_for_completion else None
         with self._lock:
+            if self._active_job_id == project_id or project_id in self._queued_ids:
+                raise DuplicateJobError(f"Project '{project_id}' is already queued or running.")
+            if len(self._queued_ids) >= self.max_queue_depth:
+                raise QueueFullError(
+                    f"Reconstruction queue is full (max {self.max_queue_depth} pending jobs). Try again later."
+                )
+
             self._cancelled_ids.discard(project_id)
             self._cancel_events[project_id] = threading.Event()
-            if project_id not in self._queued_ids and self._active_job_id != project_id:
-                self._queued_ids.append(project_id)
-            pos = (
-                self._queued_ids.index(project_id) + 1
-                if project_id in self._queued_ids
-                else 0
-            )
+            self._queued_ids.append(project_id)
+            pos = len(self._queued_ids)
 
         self.db.update_project_status(
             project_id=project_id,
@@ -237,6 +248,9 @@ class ReconstructionJobQueue:
                     self._active_job_id = None
                     self._cancel_events.pop(project_id, None)
                     self._cancelled_ids.discard(project_id)
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
                 if done_event is not None:
                     done_event.set()
                 self._queue.task_done()
@@ -329,6 +343,8 @@ class ReconstructionJobQueue:
             uncertainty_threshold=params.uncertainty_threshold,
             smoothing_iterations=params.smoothing_iterations,
             output_base_dir=out_dir.parent,
+            timeout_seconds=params.timeout_seconds,
+            cancel_event=cancel_event,
         )
 
         self.db.update_project_status(

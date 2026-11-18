@@ -224,3 +224,117 @@ def test_upload_rejects_corrupted_image_and_path_traversal() -> None:
 
         trav_resp = client.get("/api/status/..%2Fetc%2Fpasswd")
         assert trav_resp.status_code in (400, 404)
+
+
+def test_local_origin_and_host_guard() -> None:
+    """External web origins and non-local hosts must be rejected with 403 Forbidden."""
+    with TestClient(app) as client:
+        # 1. External Origin on state-changing POST must be rejected with 403
+        malicious_post = client.post(
+            "/api/reconstruct/proj_dummy",
+            json={"model_name": "depth_anything_v2_small"},
+            headers={"Origin": "https://malicious-site.com"},
+        )
+        assert malicious_post.status_code == 403
+        assert "Forbidden" in malicious_post.json()["detail"]
+
+        # 2. DNS Rebinding on Host header must be rejected with 403
+        rebinding = client.get(
+            "/api/health",
+            headers={"Host": "attacker.evil.com:8000"},
+        )
+        assert rebinding.status_code == 403
+        assert "DNS rebinding" in rebinding.json()["detail"]
+
+        # 3. Valid localhost Origin must be allowed through guard
+        legit_post = client.get(
+            "/api/health",
+            headers={"Origin": "http://localhost:5173", "Host": "localhost:8000"},
+        )
+        assert legit_post.status_code == 200
+
+
+def test_atomic_queue_duplicate_and_incomplete_asset_guards() -> None:
+    """Duplicate queueing returns 409 and incomplete project 3D asset downloads return 409."""
+    with TestClient(app) as client:
+        img = Image.new("RGB", (64, 64), color=(80, 100, 120))
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+
+        up_resp = client.post(
+            "/api/upload",
+            files={"file": ("guard_test.png", buf.getvalue(), "image/png")},
+            data={"name": "guard_test"},
+        )
+        assert up_resp.status_code == 200
+        project_id = up_resp.json()["project_id"]
+
+        # 1. Attempting to download 3D assets while project is not 'completed' must return 409
+        incomplete_glb = client.get(f"/api/export/{project_id}/glb")
+        assert incomplete_glb.status_code == 409
+        assert "not completed" in incomplete_glb.json()["detail"]
+
+        incomplete_pc = client.get(f"/api/projects/{project_id}/point-cloud-json")
+        assert incomplete_pc.status_code == 409
+        assert "not completed" in incomplete_pc.json()["detail"]
+
+        # 2. Enqueue once without synchronous wait
+        rec1 = client.post(
+            f"/api/reconstruct/{project_id}",
+            json={"run_synchronously": False, "timeout_seconds": 60.0},
+        )
+        assert rec1.status_code == 200
+
+        # 3. Immediately attempting to enqueue the same project again must return 409 Duplicate
+        rec2 = client.post(
+            f"/api/reconstruct/{project_id}",
+            json={"run_synchronously": False},
+        )
+        assert rec2.status_code == 409
+        assert "already queued or running" in rec2.json()["detail"]
+
+
+def test_multi_view_aggregate_byte_limit_and_cleanup(monkeypatch) -> None:
+    """Multi-view uploads exceeding aggregate limit must return 413 and clean up disk files."""
+    import app.api.routes as routes_mod
+
+    img = Image.new("RGB", (32, 32), color=(50, 70, 90))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    raw = buf.getvalue()
+
+    # Set limit to less than 2 files combined
+    monkeypatch.setattr(routes_mod, "MAX_MULTI_UPLOAD_TOTAL_BYTES", len(raw) + 10)
+
+    settings = get_settings()
+    before_dirs = set(settings.outputs_dir.glob("proj_*"))
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/upload-multi",
+            files=[
+                ("files", ("view_01.png", raw, "image/png")),
+                ("files", ("view_02.png", raw, "image/png")),
+            ],
+        )
+        assert resp.status_code == 413
+        assert "Aggregate multi-view upload exceeds maximum size" in resp.json()["detail"]
+
+    # Verify no orphaned project directory was left behind
+    after_dirs = set(settings.outputs_dir.glob("proj_*"))
+    assert after_dirs == before_dirs
+
+
+def test_single_view_cancellation_aborts_early() -> None:
+    """SingleViewPipeline must check cancel_event and abort immediately with JobCancelledError."""
+    import threading
+    from app.core.exceptions import JobCancelledError
+    from app.pipelines.single_view import SingleViewPipeline
+
+    img = Image.new("RGB", (64, 64), color=(100, 100, 100))
+    cancel_evt = threading.Event()
+    cancel_evt.set()  # Cancel before running
+
+    pipeline = SingleViewPipeline()
+    with pytest.raises(JobCancelledError):
+        pipeline.run(image_input=img, cancel_event=cancel_evt)

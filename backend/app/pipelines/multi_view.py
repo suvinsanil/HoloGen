@@ -42,18 +42,11 @@ from app.geometry.multi_view_fusion import (
 from app.geometry.point_cloud import PointCloudData
 from app.geometry.refinement import clean_and_refine_mesh
 from app.geometry.texture import TexturedMeshData
+from app.core.exceptions import JobCancelledError, JobTimeoutError
 from app.vision.depth_estimation import DepthModel, create_depth_model
 from app.vision.sfm import SfmReconstructionResult, run_incremental_sfm
 
 logger = get_logger("pipelines.multi_view")
-
-
-class JobCancelledError(RuntimeError):
-    """Raised when a reconstruction job is cancelled by the user."""
-
-
-class JobTimeoutError(RuntimeError):
-    """Raised when a reconstruction job exceeds its hard wall-clock timeout."""
 
 
 @dataclass
