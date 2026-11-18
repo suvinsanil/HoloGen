@@ -83,12 +83,13 @@ cd ..
 ## Key Measured Results
 
 ### 1. Experiment A — Monocular Depth ($n = 8$ Indoor RGB-D Scenes, Least-Squares Scale-Shift Aligned)
-| Model | Refinement | Abs Rel $\downarrow$ | RMSE (m) $\downarrow$ | $\delta < 1.25$ $\uparrow$ | Edge F1 $\uparrow$ | Latency (ms) |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
-| **`depth_anything_v2_small`** | `none` *(default)* | **0.0945** | **0.3511** | **0.9038** | **0.6727** | 45.2 |
-| `depth_anything_v2_small` | `guided` | 0.0955 | 0.3511 | 0.9022 | 0.6544 | 45.6 |
-| `depth_anything_v2_small` | `bilateral` | 0.0957 | 0.3522 | 0.9011 | 0.5873 | 46.8 |
-| `dpt_hybrid_midas` | `none` | 0.1306 | 0.4408 | 0.8404 | 0.5784 | 132.4 |
+| Model | Refinement | Abs Rel $\downarrow$ | RMSE (m) $\downarrow$ | $\delta < 1.25$ $\uparrow$ | Edge F1 $\uparrow$ | Latency (ms) | Peak VRAM (MB) |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **`depth_anything_v2_small`** | `none` *(default)* | **0.0945** | **0.4139** | **0.8754** | **0.6727** | 359.3 | 243.6 |
+| `depth_anything_v2_small` | `bilateral` | 0.0945 | 0.4136 | 0.8754 | 0.6544 | 359.3 + 19.1 | 243.6 |
+| `depth_anything_v2_small` | `guided` | 0.0949 | 0.4121 | 0.8731 | 0.5873 | 359.3 + 23.6 | 243.6 |
+| `dpt_hybrid_midas` | `none` | 0.1109 | 0.5181 | 0.9026 | 0.6162 | 511.8 | 658.0 |
+| `depth_anything_v2_metric_indoor_small` | `none` *(unaligned / aligned)* | 0.2944 / 0.1185 | 0.7036 / 0.3818 | 0.2990 / 0.8257 | 0.6449 / 0.6410 | 355.3 / 356.7 | 244.2 |
 
 ### 2. Phase 7b.5 — Two-View Epipolar Geometry (10 Pairs × 3 Seeds = 30 Runs/Method/Scene)
 | Scene | Method | Rot. Error (°) Med [IQR] | Trans. Dir. Error (°) Med [IQR] | Reproj. RMSE (px) Med [IQR] |
@@ -105,7 +106,7 @@ cd ..
 | Single-View (`N=1`, oracle scale+shift) | 0.257 | **0.802** | **0.0741 m** | **0.0736 [0.0366]** |
 | **Multi-View TSDF (`N=14`, `relaxed`)** | **0.276** *(ICP: 0.473)* | 0.657 *(default: 0.699)* | 0.0896 m | **0.0963 [0.0370]** *(0 GT depth)* |
 
-*(See [docs/evaluation.md](file:///d:/HoloGen/docs/evaluation.md) and [docs/experiments.md](file:///d:/HoloGen/docs/experiments.md) for Fountain tables, system metrics, and full methodology.)*
+*(See [docs/evaluation.md](docs/evaluation.md) and [docs/experiments.md](docs/experiments.md) for Fountain tables, system metrics, and full methodology. Multi-view SfM-aligned depth recovers scale and shift without GT depth to `0.0963` Abs Rel vs. `0.0736` for the 2-parameter GT oracle fit.)*
 
 ---
 
@@ -119,6 +120,6 @@ cd ..
 
 ## Models, Datasets & License
 
-- **Project License:** [MIT License](file:///d:/HoloGen/LICENSE) — compatible with all core dependencies (`torch` BSD, `open3d` MIT, `trimesh` MIT, `opencv-python` Apache-2.0, `pycolmap` BSD-3-Clause, `transformers` Apache-2.0, `fastapi` MIT).
-- **Pretrained Models:** `Depth Anything V2 Small` (Apache-2.0), `DPT-Hybrid MiDaS` (MIT) — weights are cached locally and never committed (see [models/README.md](file:///d:/HoloGen/models/README.md)).
+- **Project License:** [MIT License](LICENSE) — compatible with all core dependencies (`torch` BSD, `open3d` MIT, `trimesh` MIT, `opencv-python` Apache-2.0, `pycolmap` BSD-3-Clause, `transformers` Apache-2.0, `fastapi` MIT).
+- **Pretrained Models:** `Depth Anything V2 Small` (Apache-2.0), `DPT-Hybrid MiDaS` (MIT) — weights are cached locally and never committed (see [models/README.md](models/README.md)).
 - **Datasets:** `Open3D SampleFountainRGBDImages` (MIT), `ETH3D pipes` (CC-BY-SA), `NYU V2` / `SUN RGB-D` (MIT via Open3D), `TUM RGB-D` (CC-BY-4.0), `Redwood RGB-D` (CC0).

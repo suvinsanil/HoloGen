@@ -79,7 +79,8 @@ def _load_json_if_exists(rel_path: str):
     p = ROOT / rel_path
     if not p.exists():
         return None
-    return json.loads(p.read_text(encoding="utf-8"))
+    txt = p.read_text(encoding="utf-8").replace(str(ROOT).replace("\\", "\\\\") + "\\\\", "").replace(str(ROOT) + "\\", "")
+    return json.loads(txt)
 
 
 def main() -> int:

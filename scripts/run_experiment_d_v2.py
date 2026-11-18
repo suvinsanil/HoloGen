@@ -656,7 +656,7 @@ def main() -> int:
         eth3d_depth = _eval_eth3d_per_view_depth_v2(sfm_pipes, sim3_pipes, pipes_views, pipes_gt_pts, depth_model, best_cfg)
 
     custom_dir = settings.datasets_dir / "custom_scene_01"
-    custom_report = {"status": "not_present_in_workspace", "expected_path": str(custom_dir)}
+    custom_report = {"status": "not_present_in_workspace", "expected_path": "datasets/custom_scene_01"}
 
     _plot_pr_curves(f_rows, p_rows, out_dir / "experiment_d_v2_pr_curves.png")
 

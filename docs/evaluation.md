@@ -109,7 +109,7 @@ To test how well the spatial log-depth gradient **depth-discontinuity map** $D_{
 | **`datasets/custom_scene_01/`** | Qualitative user scene | Not present in workspace (`not_present_in_workspace`) — **not run** | — |
 
 ### 5.2 Consolidated Benchmark Summary
-1. **Experiment A — Monocular Depth ($n=8$ RGB-D scenes):** `Depth Anything V2 Small` achieves `Abs Rel = 0.0945`, `delta < 1.25 = 0.9038`, `Edge F1 = 0.6727` (`none` refinement; `guided` and `bilateral` reduced Edge F1 to `0.6544` / `0.5873` without improving Abs Rel).
+1. **Experiment A — Monocular Depth ($n=8$ RGB-D scenes):** `Depth Anything V2 Small` (`none` refinement) achieves `Abs Rel = 0.0945`, `RMSE = 0.4139 m`, `delta < 1.25 = 0.8754`, `Edge F1 = 0.6727`, `mean_inference_ms = 359.3 ms`, `peak_vram_mb = 243.6 MB` (`bilateral` / `guided` reduced Edge F1 to `0.6544` / `0.5873` without improving Abs Rel). `dpt_hybrid_midas` achieves `Abs Rel = 0.1109`, `RMSE = 0.5181 m`, `delta < 1.25 = 0.9026`, `Edge F1 = 0.6162` at `511.8 ms` / `658.0 MB` VRAM.
 2. **Phase 7b.5 — Two-View Epipolar Geometry (10 pairs × 3 seeds = 30 runs/method/scene):**
    - **ETH3D `pipes` (undistorted `PINHOLE`, GT poses, Med [IQR]):** `from_scratch_8pt_with_gn` achieves Rot `0.247° [0.655°]`, Trans `0.904° [1.645°]`, Reproj RMSE `0.321 [0.171] px` (vs. `no_gn` `2.314 px`, `pycolmap` `0.267° / 0.883° / 0.343 px`, `OpenCV 5-pt` `0.400° / 1.155° / 0.401 px`).
    - **Fountain (RGB-D ref., Med [IQR]):** All four methods plateau near `~1.0°` rotation error (`0.967°–1.022°`), reflecting the RGB-D trajectory's noise floor.
@@ -119,7 +119,7 @@ To test how well the spatial log-depth gradient **depth-discontinuity map** $D_{
 4. **Experiment D v2 (`phase-7e.3`) — Equalized 3D Geometry & Per-View Depth (NO ICP Headline, Equal-Density):**
    - **Fountain (`tau=0.05 m`, RGB-D ref., in-sample tuned):** `N=1` oracle scale (`0.223` F1) < `N=1` oracle scale+shift (`0.742`) < `N=5` (`0.824`) < `N=10` (`0.831` AABB / `0.853` Frustum).
    - **ETH3D `pipes` (`tau=0.10 m`, Faro GT, out-of-sample):** `N=1` oracle scale (`0.099` AABB F1 / `0.226` Frustum F1), `N=1` oracle scale+shift (`0.257` AABB F1 / `0.802` Frustum F1), Multi-view `N=14` (`0.276` AABB F1 / `0.657` Frustum F1; `0.699` Frustum F1 with `default 0.10/0.18`; `0.473` AABB F1 with rigid ICP).
-   - **ETH3D Per-View GT Depth (`14/14` views, Med [IQR]):** Single-view median-scale `Abs Rel = 0.1688 [0.1450]` | **Multi-view SfM-aligned `Abs Rel = 0.0963 [0.0370]`** (0 GT depth params) | Single-view oracle scale+shift `Abs Rel = 0.0736 [0.0366]`.
+   - **ETH3D Per-View GT Depth (`14/14` views, Med [IQR]):** Single-view median-scale `Abs Rel = 0.1688 [0.1450]` | **Multi-view SfM-aligned `Abs Rel = 0.0963 [0.0370]`** (0 GT depth params; not better than oracle) | Single-view oracle scale+shift `Abs Rel = 0.0736 [0.0366]`. *(Note: In `phase-7e.2`, these three medians were `0.1974 / 0.0989 / 0.0914`; the shift in `phase-7e.3` comes from re-running multi-threaded `pycolmap` SfM + undistortion, which produces slightly different undistorted `PINHOLE` focal lengths `fx, fy` across non-deterministic runs.)*
 
 ---
 
@@ -127,7 +127,7 @@ To test how well the spatial log-depth gradient **depth-discontinuity map** $D_{
 
 | Pipeline Mode & Scene | Hardware | Stage Timings | Output Counts | Peak RSS / VRAM |
 | :--- | :--- | :--- | :--- | :--- |
-| **Single-View** (`sample_01_building`, $640\times 480$) | i5-1135G7, 7.7 GB RAM, MX330 2 GB VRAM | Preprocess `49 ms`, Depth `552 ms`, Uncertainty `7 ms`, Backproj `14 ms`, Clean `1,156 ms`, Mesh `13,386 ms`, Texture `282 ms`, Export `2,737 ms`, **Total `19.17 s`** | `256,952` pts; `545,572` full faces -> `120,000` viewer faces | Fits in 2 GB VRAM (`Depth Anything V2 Small` FP16/FP32) |
+| **Single-View** (`sample_01_building`, $640\times 442$, resized from $868\times 600$) | i5-1135G7, 7.7 GB RAM, MX330 2 GB VRAM | Preprocess `55 ms`, Depth `741 ms`, Refinement `10 ms`, Uncertainty `12 ms`, Backproj `23 ms`, Clean `1,515 ms`, Mesh `15,673 ms`, Texture `329 ms`, Export `3,299 ms`, **Total `22.97 s`** | `256,952` pts; `545,572` full faces $\to$ `120,000` viewer faces | **Peak VRAM: `243.6 MB`** (`Depth Anything V2 Small` from Exp. A) |
 | **Multi-View** (`Fountain`, 10 views, `1600 px` SfM / `640 px` depth) | i5-1135G7, 7.7 GB RAM, CPU SfM + CUDA depth | SfM + Undistort `12.28 s`, Depth+Align+TSDF+Mesh `13.47 s`, **Total `25.74 s`** | `10/10` registered; `179,703` pts, `330,242` faces | **Whole-pipeline Peak RSS: `876.2 MB`** (`+409.0 MB` over baseline) |
 | **Multi-View** (`ETH3D pipes`, 14 views, `6048×4032` -> `1600 px`) | i5-1135G7, 7.7 GB RAM, CPU SfM + CUDA depth | SfM (`OPENCV` fallback) + Undistort `51.30 s`, Depth+Align+TSDF+Mesh `11.12 s`, **Total `62.42 s`** | `14/14` registered; `302,585` pts, `523,060` faces | **Whole-pipeline Peak RSS: `1,961.3 MB`** (`+1,372.6 MB` over baseline) |
 
